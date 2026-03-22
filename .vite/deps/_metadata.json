@@ -1,0 +1,42 @@
+{
+  "hash": "afda567d",
+  "configHash": "a3b4b780",
+  "lockfileHash": "e3b0c442",
+  "browserHash": "9370bad9",
+  "optimized": {
+    "react-dom/client": {
+      "src": "../../TaskTrackerFrontend/node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "0127c0a8",
+      "needsInterop": true
+    },
+    "react-router-dom": {
+      "src": "../../TaskTrackerFrontend/node_modules/react-router-dom/dist/index.mjs",
+      "file": "react-router-dom.js",
+      "fileHash": "8d2e3e11",
+      "needsInterop": false
+    },
+    "react": {
+      "src": "../../TaskTrackerFrontend/node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "cddbd6c2",
+      "needsInterop": true
+    },
+    "react/jsx-dev-runtime": {
+      "src": "../../TaskTrackerFrontend/node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "e295c513",
+      "needsInterop": true
+    }
+  },
+  "chunks": {
+    "react-DPBuIEYI": {
+      "file": "react-DPBuIEYI.js",
+      "isDynamicEntry": false
+    },
+    "react-dom-DV0xCM7u": {
+      "file": "react-dom-DV0xCM7u.js",
+      "isDynamicEntry": false
+    }
+  }
+}
