@@ -6,7 +6,7 @@ import MainPage from './MainPage';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
-    localStorage.getItem('isAuthenticated') === 'true'
+    localStorage.getItem('isAuthenticated') === 'false'
   );
 
   return (
