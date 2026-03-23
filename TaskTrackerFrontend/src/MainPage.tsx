@@ -62,11 +62,13 @@ function Dashboard() {
     };
 
     // Реальная логика создания таски
-    const handleCreateTask = async (data: { name: string; desc: string }) => {
+    const handleCreateTask = async (data: { name: string; desc: string; photo?: string }) => {
         try {
             const userId = localStorage.getItem('userId');
             const baseUrl = (import.meta as any).env.VITE_API_URL;
             if (!userId) return alert("Ошибка: Авторизуйтесь снова");
+
+            const prevIds = new Set(tasks.map((t: any) => t.id));
 
             const response = await fetch(`${baseUrl}/tasks`, {
                 method: 'POST',
@@ -79,8 +81,17 @@ function Dashboard() {
             });
 
             if (!response.ok) throw new Error('Не удалось создать задачу');
-            
-            await fetchTasks(); // Перезагружаем список
+
+            await fetchTasks();
+
+            if (data.photo) {
+                setTasks(current => {
+                    const newTask = current.find((t: any) => !prevIds.has(t.id));
+                    if (newTask) localStorage.setItem(`task_photo_${newTask.id}`, data.photo!);
+                    return current;
+                });
+            }
+
             setIsModalOpen(false);
         } catch (err: any) { alert(err.message); }
     };
@@ -89,11 +100,11 @@ function Dashboard() {
         <div className="p-8 w-full">
             <div className="flex justify-between items-start mb-8">
                 <div>
-                    <h1 className="text-3xl font-black text-gray-900">Active Tasks</h1>
+                    <h1 className="text-3xl font-black text-gray-900">Активные задачи</h1>
                     
                 </div>
                 <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-700 transition-all">
-                    + Create New Task
+                    + Создать задачу
                 </button>
             </div>
 
@@ -109,7 +120,17 @@ function Dashboard() {
                         >
                             <div className="col-span-2 text-sm font-bold text-blue-600">ID-{task.id}</div>
                             <div className="col-span-3 font-bold text-gray-900 truncate pr-4">{task.title}</div>
-                            <div className="col-span-7 text-sm text-gray-500 truncate">{task.description || "Нет описания"}</div>
+                            <div className="col-span-6 text-sm text-gray-500 truncate">{task.description || "Нет описания"}</div>
+                            {localStorage.getItem(`task_photo_${task.id}`) && (
+                                <div className="col-span-1 flex justify-center">
+                                    <img
+                                        src={localStorage.getItem(`task_photo_${task.id}`)!}
+                                        alt="фото"
+                                        className="h-8 w-8 object-cover rounded-md border border-gray-200"
+                                        onClick={(e) => { e.stopPropagation(); window.open(localStorage.getItem(`task_photo_${task.id}`)!, '_blank'); }}
+                                    />
+                                </div>
+                            )}
                             {task.owner_id === currentUserId && (
                                 <button
                                     type="button"
@@ -187,7 +208,7 @@ function Sidebar() {
     return (
         <aside className="w-64 bg-[#F8FAFC] border-r border-gray-200 p-5">
             <button className="flex items-center gap-x-3 w-full p-4 bg-white rounded-lg shadow-sm text-blue-600 font-semibold">
-                📋 My Tasks
+                📋 Мои задачи
             </button>
         </aside>
     );
