@@ -13,7 +13,7 @@ import (
 type User struct {
 	Id       int    `json:"id"`
 	Email    string `json:"email"`
-	Password int    `json:"password"`
+	Password string `json:"password"`
 }
 
 type Task struct {
@@ -73,4 +73,44 @@ func CreateConnection(ctx context.Context) (*pgx.Conn, error) {
 	}
 
 	return conn, nil
+}
+
+func CreateUser(ctx context.Context, conn *pgx.Conn, user User) (int, error) {
+	sqlQuery := `
+		INSERT INTO "User" (email, password)
+		VALUES ($1, $2)
+		RETURNING id_pk;
+	`
+	var id int
+	err := conn.QueryRow(ctx, sqlQuery,
+		user.Email,
+		user.Password,
+	).Scan(&id)
+
+	if err != nil {
+		slog.Error("create user failed", "error", err, "email", user.Email)
+		return 0, err
+	}
+	slog.Info("user created", "id", id, "email", user.Email)
+
+	return id, nil
+}
+
+func GetByEmail(ctx context.Context, conn *pgx.Conn, requestUser User) (*User, error) {
+	sqlQuery := `
+		SELECT id_pk, email, password FROM "User" WHERE email = $1 
+	`
+
+	var user User
+	err := conn.QueryRow(ctx, sqlQuery, requestUser.Email).Scan(&user.Id, &user.Email, &user.Password)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		slog.Error("database error", "error", err, "email", user.Email)
+		return nil, err
+	}
+	slog.Info("user found", "id", user.Id, "email", user.Email)
+
+	return &user, nil
 }

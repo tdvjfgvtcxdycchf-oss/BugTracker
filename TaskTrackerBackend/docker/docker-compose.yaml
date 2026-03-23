@@ -19,7 +19,7 @@ services:
       - bug_tracker_network
 
 
-  subscriptions_service_app:
+  task_tracker_service_app:
     build:
       context: ..
       dockerfile: docker/Dockerfile

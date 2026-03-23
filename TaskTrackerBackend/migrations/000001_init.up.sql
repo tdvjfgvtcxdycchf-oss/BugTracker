@@ -20,7 +20,7 @@ CREATE TABLE Bug (
     task_id_fk INTEGER NOT NULL,
     severity VARCHAR(50),
     priority VARCHAR(50),
-    os VARCHAR(100),
+    os VARCHAR(200),
     status VARCHAR(50),
     version_product VARCHAR(50),
     description TEXT,
@@ -31,15 +31,15 @@ CREATE TABLE Bug (
 
     -- За кем закреплён
     assigned_to_fk INTEGER,
-    assigned_time DATE DEFAULT CURRENT_DATE,
+    assigned_time DATE,
     
     -- Кто сдал
     passed_by_fk INTEGER,
-    passed_time DATE DEFAULT CURRENT_DATE,
+    passed_time DATE,
     
     -- Кто принял 
     accepted_by_fk INTEGER,
-    accepted_time DATE DEFAULT CURRENT_DATE,
+    accepted_time DATE,
     
     playback_description TEXT,
     expected_result TEXT,

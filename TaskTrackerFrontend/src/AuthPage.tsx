@@ -14,17 +14,53 @@ export default function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setPending(true);
 
-    if (isLogin) {
-      console.log('Данные:', { email, password, type: 'login' });
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userEmail', email);
-      navigate('/');
-      window.location.reload();
-      return;
+    const userData = { email, password };
+    const baseUrl = (import.meta as any).env.VITE_API_URL;
+  // Выбираем URL в зависимости от режима: вход или регистрация
+    const url = isLogin 
+    ? `${baseUrl}/login` // Замени на свой путь для логина
+    : `${baseUrl}/users`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(userData),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      // Выводим ошибку из бэкенда (например, "invalid password" или "user already exists")
+      throw new Error(data.error || 'Ошибка при выполнении запроса');
     }
 
-    
+    // Проверяем наличие ID (бэкенд теперь возвращает {"id": ...})
+    const userId = data.id || data.Id;
+
+    if (userId) {
+      // СОХРАНЯЕМ ДАННЫЕ
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('userId', userId.toString());
+      localStorage.setItem('userEmail', email);
+
+      // ПЕРЕХОДИМ НА ГЛАВНУЮ
+      navigate('/');
+      window.location.reload(); 
+    } else {
+      throw new Error("Сервер не вернул ID пользователя");
+    }
+
+    } catch (err: any) {
+      setFormError(err.message);
+      console.error('Auth error:', err);
+    } finally {
+      setPending(false);
+    }
   };
 
   return (
@@ -71,11 +107,17 @@ export default function AuthPage() {
             </div>
           </div>
 
+          {formError && (
+            <div className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-lg">
+              {formError}
+            </div>
+          )}
           <button
             type="submit"
+            disabled={pending}
             className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
           >
-            {isLogin ? 'Войти' : 'Зарегистрироваться'}
+            {pending ? 'Загрузка...' : (isLogin ? 'Войти' : 'Зарегистрироваться')}
           </button>
         </form>
       </div>
