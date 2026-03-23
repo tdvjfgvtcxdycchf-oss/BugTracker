@@ -65,3 +65,7 @@ func (t *TaskTrackerService) GetAllTasks(ctx context.Context) ([]sql.Task, error
 func (t *TaskTrackerService) CreateTask(ctx context.Context, task sql.Task) error {
 	return sql.CreateTask(ctx, t.conn, task)
 }
+
+func (t *TaskTrackerService) GetAllBugs(ctx context.Context, id int) ([]sql.Bug, error) {
+	return sql.GetBugsByTaskId(ctx, t.conn, id)
+}

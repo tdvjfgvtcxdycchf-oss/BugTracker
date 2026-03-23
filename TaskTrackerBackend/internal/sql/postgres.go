@@ -164,3 +164,44 @@ func CreateTask(ctx context.Context, conn *pgx.Conn, task Task) error {
 
 	return nil
 }
+
+func GetBugsByTaskId(ctx context.Context, conn *pgx.Conn, taskId int) ([]Bug, error) {
+	sqlQuery := `
+		SELECT id_pk, task_id_fk, severity, priority,
+		os, status, version_product, description,
+		created_by_fk, created_time, assigned_to_fk, assigned_time,
+		passed_by_fk, passed_time, accepted_by_fk, accepted_time,
+		playback_description, expected_result, actual_result FROM Bug
+		WHERE task_id_fk = $1
+	`
+
+	rows, err := conn.Query(ctx, sqlQuery, taskId)
+	if err != nil {
+		slog.Error("database error", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	bugs := make([]Bug, 0)
+	for rows.Next() {
+		var b Bug
+		err := rows.Scan(&b.Id, &b.TaskId, &b.Severity, &b.Priority,
+			&b.OS, &b.Status, &b.VersionProduct, &b.Description,
+			&b.CreatedBy, &b.CreatedTime, &b.AssignedTo, &b.AssignedTime,
+			&b.PassedBy, &b.PassedTime, &b.AcceptedBy, &b.AcceptedTime,
+			&b.PlaybackDescription, &b.ExpectedResult, &b.ActualResult,
+		)
+		if err != nil {
+			return nil, err
+		}
+		bugs = append(bugs, b)
+	}
+
+	if err = rows.Err(); err != nil {
+		slog.Error("failed to get bugs", "error", err)
+		return nil, err
+	}
+	slog.Info("bugs successfully received")
+
+	return bugs, nil
+}
