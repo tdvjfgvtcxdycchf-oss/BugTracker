@@ -114,3 +114,34 @@ func GetByEmail(ctx context.Context, conn *pgx.Conn, requestUser User) (*User, e
 
 	return &user, nil
 }
+
+func GetAllTasks(ctx context.Context, conn *pgx.Conn) ([]Task, error) {
+	sqlQuery := `
+		SELECT id_pk, title, description, owner_id_fk FROM Task 
+	`
+
+	rows, err := conn.Query(ctx, sqlQuery)
+	if err != nil {
+		slog.Error("database error", "error", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tasks []Task
+	for rows.Next() {
+		var t Task
+		err := rows.Scan(&t.Id, &t.Title, &t.Description, &t.OwnerId)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, t)
+	}
+
+	if err = rows.Err(); err != nil {
+		slog.Error("failed to get tasks", "error", err)
+		return nil, err
+	}
+	slog.Info("tasks successfully received")
+
+	return tasks, nil
+}

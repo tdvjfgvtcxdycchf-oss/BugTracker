@@ -57,3 +57,11 @@ func (t *TaskTrackerService) Login(ctx context.Context, user sql.User) (int, err
 	slog.Info("user logined successfully", "id", existingUser.Id)
 	return existingUser.Id, nil
 }
+
+func (t *TaskTrackerService) GetAllTasks(ctx context.Context) ([]sql.Task, error) {
+	tasks, err := sql.GetAllTasks(ctx, t.conn)
+	if err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}

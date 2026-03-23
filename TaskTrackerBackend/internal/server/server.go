@@ -45,5 +45,6 @@ func NewRouter(ctx context.Context, conn *pgx.Conn) http.Handler {
 	router.Path("/users").Methods("POST").HandlerFunc(HandleCreateUser(ctx, svc))
 	router.Path("/login").Methods("POST").HandlerFunc(HandleGetIdUser(ctx, svc))
 
+	router.Path("/tasks").Methods("GET").HandlerFunc(HandlerGetAllTasks(ctx, svc))
 	return router
 }

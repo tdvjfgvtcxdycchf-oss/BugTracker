@@ -100,3 +100,18 @@ func HandleGetIdUser(ctx context.Context, svc *service.TaskTrackerService) http.
 		json.NewEncoder(w).Encode(map[string]int{"id": loginedUserId})
 	}
 }
+
+func HandlerGetAllTasks(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		tasks, err := svc.GetAllTasks(ctx)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "could not fetch tasks")
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(tasks)
+	}
+}
