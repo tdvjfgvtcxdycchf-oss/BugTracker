@@ -150,9 +150,10 @@ func CreateTask(ctx context.Context, conn *pgx.Conn, task Task) error {
 	sqlQuery := `
 		INSERT INTO Task (title, description, owner_id_fk)
 		VALUES ($1, $2, $3)
+		RETURNING id_pk;
 	`
 
-	_, err := conn.Exec(ctx, sqlQuery,
+	id, err := conn.Exec(ctx, sqlQuery,
 		task.Title,
 		task.Description,
 		task.OwnerId,
@@ -161,6 +162,7 @@ func CreateTask(ctx context.Context, conn *pgx.Conn, task Task) error {
 		slog.Error("database error", "error", err)
 		return err
 	}
+	slog.Info("task successfully created", "task id", id)
 
 	return nil
 }
@@ -204,4 +206,75 @@ func GetBugsByTaskId(ctx context.Context, conn *pgx.Conn, taskId int) ([]Bug, er
 	slog.Info("bugs successfully received")
 
 	return bugs, nil
+}
+
+func CreateBug(ctx context.Context, conn *pgx.Conn, bug Bug) error {
+	sqlQuery := `
+        INSERT INTO Bug (task_id_fk, severity, priority, os, 
+            status, version_product, description, created_by_fk, 
+            playback_description, expected_result, actual_result
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		RETURNING id_pk;
+    `
+
+	id, err := conn.Exec(ctx, sqlQuery,
+		bug.TaskId,
+		bug.Severity,
+		bug.Priority,
+		bug.OS,
+		bug.Status,
+		bug.VersionProduct,
+		bug.Description,
+		bug.CreatedBy,
+		bug.PlaybackDescription,
+		bug.ExpectedResult,
+		bug.ActualResult,
+	)
+
+	if err != nil {
+		slog.Error("database error while creating bug", "error", err, "task_id", bug.TaskId)
+		return err
+	}
+
+	slog.Info("bug successfully created", "bug id", id)
+	return nil
+}
+
+func ChangeBug(ctx context.Context, conn *pgx.Conn, bug Bug) error {
+	sqlQuery := `
+        UPDATE Bug 
+        SET severity = $1, priority = $2, os = $3, status = $4, 
+    		version_product = $5, description = $6, playback_description = $7, expected_result = $8, 
+            actual_result = $9, assigned_to_fk = $10, assigned_time = $11, passed_by_fk = $12, 
+			passed_time = $13, accepted_by_fk = $14,accepted_time = $15
+        WHERE id_pk = $16;
+    `
+
+	_, err := conn.Exec(ctx, sqlQuery,
+		bug.Severity,
+		bug.Priority,
+		bug.OS,
+		bug.Status,
+		bug.VersionProduct,
+		bug.Description,
+		bug.PlaybackDescription,
+		bug.ExpectedResult,
+		bug.ActualResult,
+		bug.AssignedTo,
+		bug.AssignedTime,
+		bug.PassedBy,
+		bug.PassedTime,
+		bug.AcceptedBy,
+		bug.AcceptedTime,
+		bug.Id,
+	)
+
+	if err != nil {
+		slog.Error("database error while fully updating bug", "error", err, "bug_id", bug.Id)
+		return err
+	}
+
+	slog.Info("bug lifecycle and data successfully updated", "bug_id", bug.Id)
+	return nil
 }

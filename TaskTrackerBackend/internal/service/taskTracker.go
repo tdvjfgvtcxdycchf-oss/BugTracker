@@ -69,3 +69,11 @@ func (t *TaskTrackerService) CreateTask(ctx context.Context, task sql.Task) erro
 func (t *TaskTrackerService) GetAllBugs(ctx context.Context, id int) ([]sql.Bug, error) {
 	return sql.GetBugsByTaskId(ctx, t.conn, id)
 }
+
+func (t *TaskTrackerService) CreateBug(ctx context.Context, bug sql.Bug) error {
+	return sql.CreateBug(ctx, t.conn, bug)
+}
+
+func (t *TaskTrackerService) UpdateBug(ctx context.Context, bug sql.Bug) error {
+	return sql.ChangeBug(ctx, t.conn, bug)
+}

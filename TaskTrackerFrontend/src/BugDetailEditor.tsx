@@ -4,18 +4,11 @@ interface BugDetailEditorProps {
   isOpen: boolean;
   onClose: () => void;
   task: any;
-  bugId?: string;
-  onCreateBug: (bugData: any) => void;
-  onUpdateBug: (bugData: any) => void;
+  bugId?: string | number;
+  onBugSaved: (updatedBugs: any[]) => void;
 }
 
-export default function BugDetailEditor({ 
-  isOpen, onClose, task, bugId, onCreateBug, onUpdateBug 
-}: BugDetailEditorProps) {
-  
-  // Состояния полей
-  const [displayId, setDisplayId] = useState(''); // Визуальный ID (например, SL-2024-01)
-  const [title, setTitle] = useState('');
+export default function BugDetailEditor({ isOpen, onClose, task, bugId, onBugSaved }: BugDetailEditorProps) {
   const [description, setDescription] = useState('');
   const [steps, setSteps] = useState('');
   const [expected, setExpected] = useState('');
@@ -23,245 +16,195 @@ export default function BugDetailEditor({
   const [severity, setSeverity] = useState('Major');
   const [priority, setPriority] = useState('High');
   const [status, setStatus] = useState('New');
-  const [version, setVersion] = useState('v2.4.1-beta');
-  const [platforms, setPlatforms] = useState<string[]>(['Web']);
-  const [showUserList, setShowUserList] = useState(false);
+  const [version, setVersion] = useState('v1.0.0');
+  const [selectedOS, setSelectedOS] = useState<string[]>(['Web']);
+  const [currentBug, setCurrentBug] = useState<any>(null);
 
-  const users = ['Marcus Thorne', 'Alex Chen', 'Sarah Jenkins', 'Leo Rodriguez', 'Anna Smith'];
-
-  const [audit, setAudit] = useState({
-    createdBy: 'Alex Chen',
-    createdAt: '14.05.2024',
-    assignedTo: 'Not Assigned',
-    submittedBy: 'Sarah Jenkins',
-    acceptedBy: '—'
-  });
-
-  // Функция генерации случайного ID для новых багов
-  const generateBugId = () => {
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
-    const suffix = Math.random().toString(36).substring(7).toUpperCase();
-    return `SL-${randomNum}-${suffix}`;
-  };
+  const currentUserEmail = localStorage.getItem('userEmail') || 'Unknown User';
+  const osOptions = ['Android', 'iOS', 'Web', 'macOS', 'Windows', 'Linux'];
 
   useEffect(() => {
-    if (bugId && task?.bugs) {
-      const bug = task.bugs.find((b: any) => b.id === bugId);
+    if (isOpen && task) {
+      const bug = task.bugs?.find((b: any) => String(b.id) === String(bugId));
+      
       if (bug) {
-        setDisplayId(bug.id || bugId); // Используем существующий ID
-        setTitle(bug.title || '');
+        setCurrentBug(bug);
         setDescription(bug.description || '');
-        setSteps(bug.steps || '');
-        setExpected(bug.expected || '');
-        setActual(bug.actual || '');
+        setSteps(bug.playback_description || '');
+        setExpected(bug.expected_result || '');
+        setActual(bug.actual_result || '');
         setSeverity(bug.severity || 'Major');
         setPriority(bug.priority || 'High');
-        setPlatforms(bug.platforms || ['Web']);
-        setVersion(bug.version || 'v2.4.1-beta');
         setStatus(bug.status || 'New');
-        if (bug.audit) setAudit(bug.audit);
+        setVersion(bug.version_product || 'v1.0.0');
+        setSelectedOS(bug.os ? bug.os.split(', ') : ['Web']);
+      } else {
+        setCurrentBug(null);
+        setDescription(''); setSteps(''); setExpected(''); setActual('');
+        setSeverity('Major'); setPriority('High'); setStatus('New');
+        setVersion('v1.0.0'); setSelectedOS(['Web']);
       }
-    } else {
-      // Для нового бага генерируем временный ID для отображения
-      setDisplayId(generateBugId());
-      setTitle(''); setDescription(''); setSteps(''); setExpected(''); setActual('');
-      setPlatforms(['Web']);
-      setAudit({
-        createdBy: 'Alex Chen',
-        createdAt: new Date().toLocaleDateString(),
-        assignedTo: 'Not Assigned',
-        submittedBy: '—',
-        acceptedBy: '—'
-      });
     }
-  }, [bugId, task, isOpen]);
+  }, [bugId, isOpen, task]);
 
-  const togglePlatform = (p: string) => {
-    setPlatforms(prev => prev.includes(p) ? prev.filter(item => item !== p) : [...prev, p]);
-  };
-
-  const handleAssignUser = (userName: string) => {
-    setAudit(prev => ({ ...prev, assignedTo: userName }));
-    setShowUserList(false);
-  };
-
-  const handleAccept = () => {
-    setAudit(prev => ({ ...prev, acceptedBy: 'Current User' }));
-    setStatus('In Progress');
-  };
-
-  const handleSave = () => {
-    if (!title) return alert("Title is required");
-    
-    const bugData = { 
-      id: displayId, // Сохраняем сгенерированный или старый ID
-      title, description, steps, expected, actual, 
-      severity, priority, platforms, version, status,
-      audit 
+  const handleSave = async () => {
+    const payload = {
+      task_id: task.id,
+      severity, priority, status,
+      os: selectedOS.join(', '),
+      version_product: version,
+      description,
+      playback_description: steps,
+      expected_result: expected,
+      actual_result: actual,
+      created_by: Number(localStorage.getItem('userId'))
     };
-    
-    if (bugId) onUpdateBug(bugData);
-    else onCreateBug(bugData);
-    
-    onClose();
+
+    try {
+      const baseUrl = (import.meta as any).env.VITE_API_URL;
+      const url = bugId ? `${baseUrl}/bugs/update/${bugId}` : `${baseUrl}/bugs/${task.id}`;
+      const response = await fetch(url, {
+        method: bugId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) throw new Error('Save failed');
+      
+      const updatedBugs = await response.json();
+      if (typeof onBugSaved === 'function') {
+        onBugSaved(updatedBugs);
+        onClose();
+      }
+    } catch (err) {
+      alert("Ошибка сохранения");
+    }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-150 bg-slate-200/60 backdrop-blur-sm flex justify-center items-center p-4">
-      <div className="bg-[#F8FAFC] w-full max-w-5xl rounded-3xl shadow-2xl border border-white flex flex-col max-h-[95vh] relative">
+    <div className="fixed inset-0 z-[300] bg-slate-900/40 backdrop-blur-sm flex justify-center items-center p-4 text-slate-900">
+      <div className="bg-white w-full max-w-5xl rounded-[2.5rem] shadow-2xl flex flex-col max-h-[95vh] border border-slate-200 overflow-hidden">
         
-        {/* HEADER */}
-        <div className="p-8 flex justify-between items-start">
+        {/* Header */}
+        <div className="p-8 flex justify-between items-center border-b border-slate-100 bg-white">
           <div>
-            <div className="flex items-center gap-3 mb-1">
-              <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md uppercase">
-                {displayId}
-              </span>
-              <span className="bg-slate-200 text-slate-600 text-[10px] font-black px-2 py-0.5 rounded-md uppercase">
-                {status}
-              </span>
-              <h1 className="text-2xl font-black text-[#0F172A]">Technical Issue Report</h1>
-            </div>
-            <p className="text-gray-400 text-sm">Task Context: {task?.name || 'Project Tracking'}</p>
+            <h1 className="text-3xl font-black tracking-tight">Technical Issue Report</h1>
+            <p className="text-sm text-slate-400 mt-1 font-bold uppercase tracking-widest">Task: {task?.title || '—'}</p>
           </div>
-          
-          <div className="flex gap-3 relative">
-            <div className="relative">
-              <button 
-                onClick={() => setShowUserList(!showUserList)}
-                className="px-4 py-2 border-2 border-blue-600 text-blue-600 rounded-xl font-bold text-sm hover:bg-blue-50 transition-all flex items-center gap-2"
-              >
-                Assign
-              </button>
-              {showUserList && (
-                <div className="absolute top-12 left-0 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-160 py-2">
-                  {users.map(u => (
-                    <button key={u} onClick={() => handleAssignUser(u)} className="w-full text-left px-4 py-2 text-xs font-bold text-gray-600 hover:bg-blue-50 transition-colors">
-                      {u}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <button onClick={handleAccept} className="px-4 py-2 bg-blue-100 text-blue-700 rounded-xl font-bold text-sm hover:bg-blue-200 transition-all">
-              Accept
+          <div className="flex gap-4">
+            <button onClick={onClose} className="px-6 py-2 text-slate-400 font-bold hover:text-slate-600 transition-colors">Cancel</button>
+            <button onClick={handleSave} className="px-10 py-3 bg-blue-600 text-white rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-all active:scale-95">
+              {bugId ? 'Update Bug' : 'Create Bug'}
             </button>
-
-            <button onClick={handleSave} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 shadow-lg transition-all">
-              {bugId ? 'Update' : 'Create'}
-            </button>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl px-2">&times;</button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-8 pb-8">
-          <div className="flex gap-6">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-8 bg-[#F8FAFC]">
+          <div className="grid grid-cols-3 gap-8">
             
-            {/* LEFT COLUMN */}
-            <div className="flex-2 space-y-6">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Issue Title</label>
-                <input 
-                  className="w-full bg-gray-50 border-none rounded-xl px-4 py-3 text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 font-bold"
-                  value={title} onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Summarize the technical problem..."
-                />
+            {/* Left Column (Inputs) */}
+            <div className="col-span-2 space-y-6">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Detailed Description</label>
+                <textarea className="w-full mt-2 p-4 border border-slate-200 rounded-2xl min-h-[120px] outline-none bg-white focus:ring-2 ring-blue-500/10 transition-all" 
+                  value={description} onChange={e => setDescription(e.target.value)} placeholder="Summarize the core problem..." />
               </div>
 
-              <div className="bg-[#EFF6FF] p-8 rounded-3xl space-y-6 border border-blue-50">
+              <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <h3 className="text-blue-900 font-black text-xs uppercase mb-3 flex items-center gap-2">Description</h3>
-                  <textarea className="w-full bg-white rounded-xl p-4 min-h-80px outline-none text-sm text-gray-600 border-none shadow-inner resize-none" value={description} onChange={(e)=>setDescription(e.target.value)} />
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Expected Result</label>
+                  <textarea className="w-full mt-2 p-4 border border-green-100 bg-green-50/20 rounded-2xl min-h-[100px] outline-none" 
+                    value={expected} onChange={e => setExpected(e.target.value)} />
                 </div>
                 <div>
-                  <h3 className="text-blue-900 font-black text-xs uppercase mb-3 flex items-center gap-2">Steps to Reproduce</h3>
-                  <textarea className="w-full bg-white rounded-xl p-4 min-h-80px outline-none text-sm text-gray-600 border-none shadow-inner resize-none" value={steps} onChange={(e)=>setSteps(e.target.value)} />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h3 className="text-green-700 font-black text-[10px] uppercase mb-2">Expected Result</h3>
-                    <textarea className="w-full bg-white rounded-xl p-3 min-h-60px outline-none text-xs text-gray-500 border-none resize-none" value={expected} onChange={(e)=>setExpected(e.target.value)} />
-                  </div>
-                  <div>
-                    <h3 className="text-red-700 font-black text-[10px] uppercase mb-2">Actual Result</h3>
-                    <textarea className="w-full bg-white rounded-xl p-3 min-h-60px outline-none text-xs text-gray-500 border-none resize-none" value={actual} onChange={(e)=>setActual(e.target.value)} />
-                  </div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Actual Result</label>
+                  <textarea className="w-full mt-2 p-4 border border-red-100 bg-red-50/20 rounded-2xl min-h-[100px] outline-none" 
+                    value={actual} onChange={e => setActual(e.target.value)} />
                 </div>
               </div>
 
-              {/* AUDIT TRAIL */}
-              <div className="p-4 border-t border-gray-100 mt-4">
-                <h3 className="text-blue-900 font-black text-[11px] uppercase tracking-widest mb-6 flex items-center gap-2">⌘ Audit Trail</h3>
-                <div className="grid grid-cols-4 gap-6">
-                  <div>
-                    <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Created By</div>
-                    <div className="text-sm font-bold text-gray-700">{audit.createdBy}</div>
-                    <div className="text-[10px] text-gray-400 font-bold">{audit.createdAt}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-black text-blue-600 uppercase mb-1">Assigned To</div>
-                    <div className="text-sm font-bold text-blue-700 underline decoration-2 underline-offset-4">{audit.assignedTo}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Submitted By</div>
-                    <div className="text-sm font-bold text-gray-700">{audit.submittedBy}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-black text-gray-400 uppercase mb-1">Accepted By</div>
-                    <div className="text-sm font-bold text-gray-700">{audit.acceptedBy}</div>
-                  </div>
-                </div>
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Steps to Reproduce</label>
+                <textarea className="w-full mt-2 p-4 border border-slate-200 rounded-2xl min-h-[150px] font-mono text-sm outline-none bg-white focus:ring-2 ring-blue-500/10 transition-all" 
+                  value={steps} onChange={e => setSteps(e.target.value)} />
               </div>
             </div>
 
-            {/* RIGHT COLUMN */}
-            <div className="flex-1 space-y-4">
-              <div className="bg-[#E2E8F0]/40 p-6 rounded-2xl border border-white space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Severity</label>
-                    <select className="w-full bg-white rounded-lg px-2 py-2 text-[11px] font-bold text-red-600 outline-none shadow-sm" value={severity} onChange={(e)=>setSeverity(e.target.value)}>
-                      <option>Major</option><option>Minor</option><option>Critical</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Priority</label>
-                    <select className="w-full bg-white rounded-lg px-2 py-2 text-[11px] font-bold text-blue-600 outline-none shadow-sm" value={priority} onChange={(e)=>setPriority(e.target.value)}>
-                      <option>High</option><option>Medium</option><option>Low</option>
-                    </select>
-                  </div>
+            {/* Right Column (Controls) */}
+            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-6 h-fit">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Severity</label>
+                  <select className="w-full p-3 bg-slate-50 rounded-xl font-bold border-none outline-none appearance-none cursor-pointer" 
+                    value={severity} onChange={e => setSeverity(e.target.value)}>
+                    <option>Critical</option><option>Major</option><option>Minor</option>
+                  </select>
                 </div>
-
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase mb-3">Target Platform</label>
-                  <div className="flex flex-wrap gap-2">
-                    {['Android', 'iOS', 'Web', 'macOS', 'Windows', 'Linux'].map(p => (
-                      <button 
-                        key={p} onClick={() => togglePlatform(p)}
-                        className={`px-3 py-1.5 rounded-full text-[10px] font-black transition-all ${platforms.includes(p) ? 'bg-blue-700 text-white shadow-md' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
-                      >
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Version</label>
-                    <input className="w-full bg-white rounded-lg px-3 py-2 text-[11px] font-bold text-gray-700 outline-none" value={version} onChange={(e)=>setVersion(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Status</label>
-                    <select className="w-full bg-white rounded-lg px-2 py-2 text-[11px] font-bold text-gray-700 outline-none shadow-sm" value={status} onChange={(e)=>setStatus(e.target.value)}>
-                      <option>New</option><option>In Progress</option><option>Resolved</option>
-                    </select>
-                  </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Priority</label>
+                  <select className="w-full p-3 bg-slate-50 rounded-xl font-bold border-none outline-none appearance-none cursor-pointer" 
+                    value={priority} onChange={e => setPriority(e.target.value)}>
+                    <option>High</option><option>Medium</option><option>Low</option>
+                  </select>
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Target OS</label>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {osOptions.map(os => (
+                    <button key={os} type="button" onClick={() => setSelectedOS(prev => prev.includes(os) ? prev.filter(x => x !== os) : [...prev, os])}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${selectedOS.includes(os) ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                      {os}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</label>
+                <select className="w-full p-3 bg-slate-50 rounded-xl font-bold border-none outline-none appearance-none cursor-pointer" 
+                  value={status} onChange={e => setStatus(e.target.value)}>
+                  <option>New</option><option>In Progress</option><option>Resolved</option><option>Closed</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Version</label>
+                <input type="text" className="w-full p-3 bg-slate-50 rounded-xl font-bold outline-none border-none focus:ring-2 ring-blue-500/10" 
+                  value={version} onChange={e => setVersion(e.target.value)} />
+              </div>
+            </div>
+          </div>
+
+          {/* Lifecycle Audit Trail */}
+          <div className="mt-12">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lifecycle Audit Trail</label>
+            <div className="mt-4 grid grid-cols-4 gap-4">
+              <div className="bg-white border border-slate-100 p-5 rounded-3xl shadow-sm">
+                <span className="text-xs font-black text-slate-900">Создан:</span>
+                <div className="mt-2 text-sm text-slate-400 space-y-1">
+                  <p>
+                    {currentBug?.created_at 
+                      ? new Date(currentBug.created_at).toLocaleDateString() 
+                      : new Date().toLocaleDateString()}
+                  </p>
+                  <p>by <span className="text-slate-600 font-medium">{currentBug?.creator_email || currentUserEmail}</span></p>
+                </div>
+              </div>
+              
+              {['Закреплен за', 'Сдал', 'Принял'].map((label, i) => (
+                <div key={i} className="bg-white border border-slate-100 p-5 rounded-3xl shadow-sm">
+                  <span className="text-xs font-black text-slate-900">{label}:</span>
+                  <div className="mt-2 text-sm text-slate-400 space-y-1">
+                    <p>—</p>
+                    <p>by <span className="text-slate-600 font-medium">—</span></p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
