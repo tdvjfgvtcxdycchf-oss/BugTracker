@@ -28,8 +28,7 @@ function Dashboard() {
 
     const handleDeleteTask = async (taskId: number) => {
         if (!taskId || !currentUserId) return;
-        if (!confirm('Удалить таску?')) return;
-
+        if (!confirm('Удалить задачу?')) return;
         try {
             const baseUrl = (import.meta as any).env.VITE_API_URL;
             const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
@@ -37,109 +36,95 @@ function Dashboard() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ owner_id: currentUserId }),
             });
-
             if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
-
-            // Сбрасываем открытые модалки/редактор если удалили текущую
             if (selectedTask?.id === taskId) {
                 setSelectedTask(null);
                 setIsEditorOpen(false);
                 setSelectedBugId(undefined);
             }
-
             await fetchTasks();
         } catch (err: any) {
-            console.error(err);
-            alert('Не удалось удалить таску');
+            alert('Не удалось удалить задачу');
         }
     };
 
-    // Обновление списка багов в конкретной задаче
     const handleBugSavedInState = (updatedBugs: any[]) => {
-        setTasks(prev => prev.map(t => 
+        setTasks(prev => prev.map(t =>
             t.id === selectedTask?.id ? { ...t, bugs: updatedBugs } : t
         ));
     };
 
-    // Реальная логика создания таски
-    const handleCreateTask = async (data: { name: string; desc: string; photo?: string }) => {
+    const handleCreateTask = async (data: { name: string; desc: string }) => {
         try {
             const userId = localStorage.getItem('userId');
             const baseUrl = (import.meta as any).env.VITE_API_URL;
             if (!userId) return alert("Ошибка: Авторизуйтесь снова");
-
-            const prevIds = new Set(tasks.map((t: any) => t.id));
-
             const response = await fetch(`${baseUrl}/tasks`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: data.name,
-                    description: data.desc,
-                    owner_id: Number(userId)
-                }),
+                body: JSON.stringify({ title: data.name, description: data.desc, owner_id: Number(userId) }),
             });
-
             if (!response.ok) throw new Error('Не удалось создать задачу');
-
             await fetchTasks();
-
-            if (data.photo) {
-                setTasks(current => {
-                    const newTask = current.find((t: any) => !prevIds.has(t.id));
-                    if (newTask) localStorage.setItem(`task_photo_${newTask.id}`, data.photo!);
-                    return current;
-                });
-            }
-
             setIsModalOpen(false);
         } catch (err: any) { alert(err.message); }
     };
 
+    const colors = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+    const getColor = (id: number) => colors[id % colors.length];
+
     return (
-        <div className="p-8 w-full">
-            <div className="flex justify-between items-start mb-8">
+        <div className="p-8 w-full max-w-4xl mx-auto">
+            <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h1 className="text-3xl font-black text-gray-900">Активные задачи</h1>
-                    
+                    <h1 className="text-2xl font-bold text-gray-900">Задачи</h1>
+                    <p className="text-sm text-gray-400 mt-0.5">{tasks.length} активных задач</p>
                 </div>
-                <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-700 transition-all">
-                    + Создать задачу
+                <button
+                    onClick={() => setIsModalOpen(true)}
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all text-sm"
+                >
+                    <span className="text-lg leading-none">+</span> Создать задачу
                 </button>
             </div>
 
             {isLoading ? (
-                <div className="flex justify-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div></div>
+                <div className="flex justify-center py-20">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent"></div>
+                </div>
+            ) : tasks.length === 0 ? (
+                <div className="text-center py-24">
+                    <div className="text-6xl mb-4">📋</div>
+                    <p className="text-lg font-medium text-gray-400">Задач пока нет</p>
+                    <p className="text-sm text-gray-300 mt-1">Нажмите «Создать задачу», чтобы начать</p>
+                </div>
             ) : (
-                <div className="space-y-3">
+                <div className="grid gap-3">
                     {tasks.map(task => (
                         <div
                             key={task.id}
                             onClick={() => setSelectedTask(task)}
-                            className="relative grid grid-cols-12 items-center bg-white p-4 cursor-pointer hover:shadow-md rounded-xl border border-gray-100 transition-all"
+                            className="group flex items-center bg-white rounded-2xl border border-gray-100 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-50 cursor-pointer transition-all duration-200 overflow-hidden"
                         >
-                            <div className="col-span-2 text-sm font-bold text-blue-600">ID-{task.id}</div>
-                            <div className="col-span-3 font-bold text-gray-900 truncate pr-4">{task.title}</div>
-                            <div className="col-span-6 text-sm text-gray-500 truncate">{task.description || "Нет описания"}</div>
-                            {localStorage.getItem(`task_photo_${task.id}`) && (
-                                <div className="col-span-1 flex justify-center">
-                                    <img
-                                        src={localStorage.getItem(`task_photo_${task.id}`)!}
-                                        alt="фото"
-                                        className="h-8 w-8 object-cover rounded-md border border-gray-200"
-                                        onClick={(e) => { e.stopPropagation(); window.open(localStorage.getItem(`task_photo_${task.id}`)!, '_blank'); }}
-                                    />
+                            <div className="w-1 self-stretch shrink-0" style={{ backgroundColor: getColor(task.id) }} />
+                            <div className="flex items-center gap-4 flex-1 px-5 py-4 min-w-0">
+                                <span className="text-xs font-bold px-2.5 py-1 rounded-lg text-white shrink-0" style={{ backgroundColor: getColor(task.id) }}>
+                                    #{task.id}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-semibold text-gray-900 truncate">{task.title}</p>
+                                    <p className="text-sm text-gray-400 truncate mt-0.5">{task.description || 'Без описания'}</p>
                                 </div>
-                            )}
-                            {task.owner_id === currentUserId && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-red-600 bg-red-50 border border-red-100 px-3 py-1 rounded-lg hover:bg-red-100"
-                                >
-                                    Удалить
-                                </button>
-                            )}
+                                {task.owner_id === currentUserId && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
+                                        className="shrink-0 opacity-0 group-hover:opacity-100 text-xs font-semibold text-red-500 bg-red-50 border border-red-100 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-all"
+                                    >
+                                        Удалить
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -148,33 +133,25 @@ function Dashboard() {
             <TaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onCreate={handleCreateTask} />
 
             {selectedTask && !isEditorOpen && (
-                <BugsModal 
-                    task={tasks.find(t => t.id === selectedTask.id) || selectedTask} 
-                    onClose={() => setSelectedTask(null)} 
+                <BugsModal
+                    task={tasks.find(t => t.id === selectedTask.id) || selectedTask}
+                    onClose={() => setSelectedTask(null)}
                     setIsEditorOpen={setIsEditorOpen}
                     setSelectedBugId={setSelectedBugId}
-                    onBugsLoaded={handleBugSavedInState} // Важно: обновляем баги в родителе
+                    onBugsLoaded={handleBugSavedInState}
                 />
             )}
 
             {isEditorOpen && selectedTask && (
-    <BugDetailEditor 
-        isOpen={isEditorOpen} 
-        onClose={() => {
-            setIsEditorOpen(false);
-            setSelectedBugId(undefined);
-        }} 
-        // Ищем задачу
-        task={tasks.find(t => t.id === selectedTask.id) || selectedTask} 
-        // Ищем конкретный баг внутри этой задачи по ID
-        currentBug={tasks
-            .find(t => t.id === selectedTask.id)?.bugs
-            ?.find((b: any) => b.id === Number(selectedBugId))
-        }
-        bugId={selectedBugId}
-        onBugSaved={handleBugSavedInState} 
-    />
-)}
+                <BugDetailEditor
+                    isOpen={isEditorOpen}
+                    onClose={() => { setIsEditorOpen(false); setSelectedBugId(undefined); }}
+                    task={tasks.find(t => t.id === selectedTask.id) || selectedTask}
+                    currentBug={tasks.find(t => t.id === selectedTask.id)?.bugs?.find((b: any) => b.id === Number(selectedBugId))}
+                    bugId={selectedBugId}
+                    onBugSaved={handleBugSavedInState}
+                />
+            )}
         </div>
     );
 }
@@ -183,20 +160,31 @@ function Header() {
     const [isOpen, setIsOpen] = useState(false);
     const navigate = useNavigate();
     const userEmail = localStorage.getItem('userEmail') || 'Guest';
+    const initials = userEmail.slice(0, 2).toUpperCase();
 
     const handleLogout = () => { localStorage.clear(); navigate('/login'); window.location.reload(); };
 
     return (
-        <header className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 w-full">
-            <div className="text-blue-600 font-bold text-xl tracking-tight">BugTracker</div>
+        <header className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-gray-100 w-full">
+            <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center">
+                    <span className="text-white text-xs font-black">B</span>
+                </div>
+                <span className="font-bold text-gray-900 tracking-tight">BugTracker</span>
+            </div>
             <div className="relative">
-                <button onClick={() => setIsOpen(!isOpen)} className="flex items-center justify-center w-10 h-10 rounded-xl bg-blue-100 border-2 border-blue-600 text-blue-600">
-                    <span className="text-xs font-bold">UI</span>
+                <button
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 font-bold text-xs flex items-center justify-center border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                >
+                    {initials}
                 </button>
                 {isOpen && (
-                    <div className="absolute right-0 mt-2 w-48 bg-white border rounded-lg shadow-lg py-1 z-50">
-                        <div className="px-4 py-2 text-xs text-gray-400 border-b">{userEmail}</div>
-                        <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 font-medium">Выйти</button>
+                    <div className="absolute right-0 mt-2 w-52 bg-white border border-gray-100 rounded-xl shadow-xl py-1 z-50">
+                        <div className="px-4 py-2.5 text-xs text-gray-400 border-b border-gray-50 truncate">{userEmail}</div>
+                        <button onClick={handleLogout} className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 font-medium transition-colors">
+                            Выйти
+                        </button>
                     </div>
                 )}
             </div>
@@ -206,9 +194,9 @@ function Header() {
 
 function Sidebar() {
     return (
-        <aside className="w-64 bg-[#F8FAFC] border-r border-gray-200 p-5">
-            <button className="flex items-center gap-x-3 w-full p-4 bg-white rounded-lg shadow-sm text-blue-600 font-semibold">
-                📋 Мои задачи
+        <aside className="w-56 bg-gray-50 border-r border-gray-100 p-4">
+            <button className="flex items-center gap-3 w-full px-3 py-2.5 bg-white rounded-xl shadow-sm text-indigo-600 font-semibold text-sm border border-indigo-50">
+                <span>📋</span> Мои задачи
             </button>
         </aside>
     );
@@ -216,11 +204,11 @@ function Sidebar() {
 
 export default function MainPage() {
     return (
-        <div className="flex flex-col h-screen bg-white">
-            <Header /> 
+        <div className="flex flex-col h-screen bg-gray-50">
+            <Header />
             <div className="flex flex-1 overflow-hidden">
                 <Sidebar />
-                <main className="flex-1 bg-white overflow-y-auto">
+                <main className="flex-1 bg-gray-50 overflow-y-auto">
                     <Dashboard />
                 </main>
             </div>
