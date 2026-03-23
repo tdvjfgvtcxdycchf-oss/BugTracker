@@ -48,36 +48,55 @@ export default function BugDetailEditor({ isOpen, onClose, task, bugId, onBugSav
   }, [bugId, isOpen, task]);
 
   const handleSave = async () => {
-    const payload = {
-      task_id: task.id,
-      severity, priority, status,
-      os: selectedOS.join(', '),
-      version_product: version,
-      description,
-      playback_description: steps,
-      expected_result: expected,
-      actual_result: actual,
-      created_by: Number(localStorage.getItem('userId'))
-    };
+  // Проверка обязательного поля
+  if (!description) return alert("Description is required");
 
-    try {
-      const baseUrl = (import.meta as any).env.VITE_API_URL;
-      const url = bugId ? `${baseUrl}/bugs/update/${bugId}` : `${baseUrl}/bugs/${task.id}`;
-      const response = await fetch(url, {
-        method: bugId ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+  const payload = {
+    task_id: task.id,
+    severity,
+    priority,
+    status,
+    os: selectedOS.join(', '),
+    version_product: version,
+    description,
+    playback_description: steps,
+    expected_result: expected,
+    actual_result: actual,
+    // Не забываем ID пользователя для бэкенда
+    created_by: Number(localStorage.getItem('userId')) 
+  };
 
-      if (!response.ok) throw new Error('Save failed');
-      
-      const updatedBugs = await response.json();
-      if (typeof onBugSaved === 'function') {
-        onBugSaved(updatedBugs);
-        onClose();
-      }
-    } catch (err) {
-      alert("Ошибка сохранения");
+  try {
+    const baseUrl = (import.meta as any).env.VITE_API_URL;
+    
+    // Если bugId есть — PATCH на /bugs/{id}, если нет — POST на создание
+    const url = bugId 
+      ? `${baseUrl}/bugs/${bugId}` 
+      : `${baseUrl}/bugs/${task.id}`;
+
+    const method = bugId ? 'PATCH' : 'POST';
+
+    const response = await fetch(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Ошибка при сохранении');
+    }
+
+    // Бэкенд теперь возвращает весь список багов задачи
+    const updatedBugs = await response.json();
+    
+    if (typeof onBugSaved === 'function') {
+      onBugSaved(updatedBugs);
+      onClose();
+    }
+    } catch (err: any) {
+      console.error("Save error:", err);
+      alert(err.message);
     }
   };
 
