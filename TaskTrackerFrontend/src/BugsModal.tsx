@@ -17,9 +17,9 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
         {/* Шапка модалки */}
         <div className="p-6 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
         <div>
-            <h2 className="text-xl font-black text-gray-900 line-clamp-1">{task.name}</h2>
+            <h2 className="text-xl font-black text-gray-900 line-clamp-1">{task.title}</h2>
             {/* ДОБАВЛЕНО ОПИСАНИЕ: */}
-            <p className="text-sm text-gray-500 mt-1">{task.desc}</p>
+            <p className="text-sm text-gray-500 mt-1">{task.description}</p>
             <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-2">Bugs Repository</p>
         </div>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-900 text-3xl">&times;</button>

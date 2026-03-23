@@ -101,7 +101,7 @@ func HandleGetIdUser(ctx context.Context, svc *service.TaskTrackerService) http.
 	}
 }
 
-func HandlerGetAllTasks(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
+func HandleGetAllTasks(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -112,6 +112,48 @@ func HandlerGetAllTasks(ctx context.Context, svc *service.TaskTrackerService) ht
 		}
 
 		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(tasks)
+	}
+}
+
+func HandleCreateTask(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		var task sql.Task
+		if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+			slog.Warn("login user: invalid json", "error", err)
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
+			return
+		}
+
+		if task.Title == "" {
+			slog.Warn("task title: empty tittle", "error", "string is empty")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "empty title"})
+			return
+		}
+
+		if task.Description == "" {
+			slog.Warn("task description: empty description", "error", "string is empty")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": "empty description"})
+			return
+		}
+
+		if err := svc.CreateTask(ctx, task); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "could not fetch tasks")
+			return
+		}
+
+		tasks, err := svc.GetAllTasks(ctx)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "could not fetch tasks")
+			return
+		}
+
+		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(tasks)
 	}
 }

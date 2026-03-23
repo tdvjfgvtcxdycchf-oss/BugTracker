@@ -145,3 +145,22 @@ func GetAllTasks(ctx context.Context, conn *pgx.Conn) ([]Task, error) {
 
 	return tasks, nil
 }
+
+func CreateTask(ctx context.Context, conn *pgx.Conn, task Task) error {
+	sqlQuery := `
+		INSERT INTO Task (title, description, owner_id_fk)
+		VALUES ($1, $2, $3)
+	`
+
+	_, err := conn.Exec(ctx, sqlQuery,
+		task.Title,
+		task.Description,
+		task.OwnerId,
+	)
+	if err != nil {
+		slog.Error("database error", "error", err)
+		return err
+	}
+
+	return nil
+}

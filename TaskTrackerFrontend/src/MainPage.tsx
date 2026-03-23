@@ -41,26 +41,43 @@ function Dashboard() {
     // 4. Логика создания новой Таски в БД
     const handleCreateTask = async (data: { name: string; desc: string }) => {
         try {
+        // Достаем ID пользователя. Убедись, что при логине ты сохранил его как 'userId'
             const userId = localStorage.getItem('userId');
             const baseUrl = (import.meta as any).env.VITE_API_URL;
 
-            const response = await fetch(`${baseUrl}/users`, { // Путь /users согласно твоему HandleCreateUser
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    title: data.name,        // Поле в Go: Title
-                    description: data.desc,  // Поле в Go: Description
-                    owner_id: Number(userId) // Поле в Go: OwnerId
-                }),
-            });
+            if (!userId) {
+                alert("Ошибка: Пользователь не авторизован");
+                return;
+        }
 
-            if (!response.ok) throw new Error('Не удалось создать задачу');
+        const response = await fetch(`${baseUrl}/tasks`, { // Используем путь /tasks
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: data.name,
+                description: data.desc,
+                owner_id: Number(userId) // Передаем ID того, кто зашел
+            }),
+        });
 
-            // Обновляем список после успешного создания
-            await fetchTasks();
-            setIsModalOpen(false);
-        } catch (err) {
-            alert("Ошибка при создании задачи. Проверьте соединение с бэкендом.");
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Не удалось создать задачу');
+        }
+
+        // ВАЖНО: Твой бэкенд возвращает список задач после создания.
+        // Мы можем сразу обновить стейт этими данными
+        const updatedTasks = await response.json();
+        setTasks(updatedTasks || []);
+
+        // Закрываем модалку
+        setIsModalOpen(false);
+        
+        // На всякий случай можно вызвать fetchTasks(), если бэкенд вдруг вернет только одну таску
+        // await fetchTasks(); 
+
+        } catch (err: any) {
+            alert(`Ошибка: ${err.message}`);
             console.error(err);
         }
     };
@@ -143,7 +160,7 @@ function Dashboard() {
                                 className="grid grid-cols-12 items-center bg-white p-4 cursor-pointer hover:shadow-md hover:border-blue-400 rounded-xl transition-all shadow-sm border border-gray-100"
                             >
                                 <div className="col-span-2 text-sm font-bold text-blue-600">
-                                    T-{task.id}
+                                    {task.id}
                                 </div>
                                 <div className="col-span-3 font-bold text-gray-900 truncate pr-4">
                                     {task.title}

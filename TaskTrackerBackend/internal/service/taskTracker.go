@@ -59,9 +59,9 @@ func (t *TaskTrackerService) Login(ctx context.Context, user sql.User) (int, err
 }
 
 func (t *TaskTrackerService) GetAllTasks(ctx context.Context) ([]sql.Task, error) {
-	tasks, err := sql.GetAllTasks(ctx, t.conn)
-	if err != nil {
-		return nil, err
-	}
-	return tasks, nil
+	return sql.GetAllTasks(ctx, t.conn)
+}
+
+func (t *TaskTrackerService) CreateTask(ctx context.Context, task sql.Task) error {
+	return sql.CreateTask(ctx, t.conn, task)
 }
