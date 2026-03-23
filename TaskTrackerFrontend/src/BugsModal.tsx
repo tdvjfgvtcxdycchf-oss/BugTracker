@@ -64,7 +64,7 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
         <div className="p-6 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
           <div>
             <h2 className="text-xl font-black text-gray-900 line-clamp-1">{task.title}</h2>
-            <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">Bugs Repository</p>
+            <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">Репозиторий багов</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-900 text-3xl">&times;</button>
         </div>
@@ -96,14 +96,14 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
               </div>
             ))
           ) : (
-            <div className="text-center py-10 text-gray-400 italic">No bugs reported yet.</div>
+            <div className="text-center py-10 text-gray-400 italic">Багов пока нет.</div>
           )}
         </div>
 
         <div className="p-6 border-t bg-white rounded-b-2xl">
           <button onClick={() => { setSelectedBugId(undefined); setIsEditorOpen(true); }}
             className="w-full py-3 border-2 border-dashed border-blue-200 text-blue-600 font-bold rounded-xl hover:bg-blue-50 transition-all">
-            + Create New Bug
+            + Создать баг
           </button>
         </div>
       </div>

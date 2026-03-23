@@ -62,6 +62,20 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const currentUserEmail = localStorage.getItem('userEmail') || 'Guest';
   const currentUserId = Number(localStorage.getItem('userId') || '0');
   const [lifecyclePending, setLifecyclePending] = useState(false);
+  const [photo, setPhoto] = useState<string | undefined>();
+  const [photoName, setPhotoName] = useState('');
+  const [lightbox, setLightbox] = useState(false);
+
+  const getBugPhotoKey = () => `bug_photo_${getBugId()}`;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => setPhoto(reader.result as string);
+    reader.readAsDataURL(file);
+  };
 
   const [severity, setSeverity] = useState('Low');
   const [priority, setPriority] = useState('Low');
@@ -190,6 +204,16 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     };
   }, [isOpen, currentBug, currentUserId]);
 
+  // Загружаем фото из localStorage при открытии бага
+  useEffect(() => {
+    if (isOpen && currentBug) {
+      const saved = localStorage.getItem(`bug_photo_${currentBug.id ?? currentBug.id_pk}`);
+      if (saved) setPhoto(saved);
+      else { setPhoto(undefined); setPhotoName(''); }
+    }
+    if (isOpen && !currentBug) { setPhoto(undefined); setPhotoName(''); }
+  }, [isOpen, currentBug]);
+
   // Заполнение полей данными
   useEffect(() => {
     if (isOpen && currentBug) {
@@ -274,6 +298,13 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
       if (res.ok) {
         await refreshBugs();
+        if (photo) {
+          // Для нового бага ID придёт из обновлённого списка — берём максимальный
+          const bugsRes = await fetch(`${baseUrl}/bugs/${task.id}`);
+          const bugs = await bugsRes.json().catch(() => []);
+          const targetId = isEditing ? getBugId() : Math.max(...bugs.map((b: any) => b.id));
+          if (targetId) localStorage.setItem(`bug_photo_${targetId}`, photo);
+        }
         if (opts?.closeOnSuccess !== false) onClose();
       }
     } catch (err) { console.error(err); }
@@ -380,7 +411,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
       <div className="bg-white w-full max-w-[900px] max-h-[90vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col p-10">
         
         <h1 className="text-3xl font-black text-slate-900 mb-8">
-          {isEditing ? 'Edit Bug Report' : 'Create Bug Report'}
+          {isEditing ? 'Редактировать баг' : 'Создать баг'}
         </h1>
             <h1 className="text-xl font-black text-slate-900 mb-8">
               Bug ID: {currentBug?.id}
@@ -390,19 +421,19 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
           <div className="grid grid-cols-3 gap-6">
             
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900">Severity</label>
+              <label className="text-xs font-bold text-slate-900">Серьёзность</label>
               <select value={severity} onChange={e => setSeverity(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none">
                 <option>Low</option><option>Medium</option><option>High</option>
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900">Priority</label>
+              <label className="text-xs font-bold text-slate-900">Приоритет</label>
               <select value={priority} onChange={e => setPriority(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none">
                 <option>Low</option><option>Medium</option><option>High</option>
               </select>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900">Status</label>
+              <label className="text-xs font-bold text-slate-900">Статус</label>
               <select value={status} onChange={e => setStatus(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none">
                 <option>Open</option><option>In Progress</option><option>Closed</option>
               </select>
@@ -434,11 +465,11 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
           {/* Описания */}
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900">Description</label>
+              <label className="text-xs font-bold text-slate-900">Описание</label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-4 rounded-xl border-slate-100 bg-slate-50 min-h-[120px] outline-none" />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900">Steps to Reproduce</label>
+              <label className="text-xs font-bold text-slate-900">Шаги воспроизведения</label>
               <textarea value={steps} onChange={e => setSteps(e.target.value)} className="w-full p-4 rounded-xl border-slate-100 bg-slate-50 min-h-[120px] outline-none" />
             </div>
           </div>
@@ -446,7 +477,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
           {/* ВЕРНУЛИ: Ожидаемый и фактический результаты */}
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900">Expected Result</label>
+              <label className="text-xs font-bold text-slate-900">Ожидаемый результат</label>
               <textarea 
                 value={expected} 
                 onChange={e => setExpected(e.target.value)} 
@@ -454,7 +485,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900">Actual Result</label>
+              <label className="text-xs font-bold text-slate-900">Фактический результат</label>
               <textarea 
                 value={actual} 
                 onChange={e => setActual(e.target.value)} 
@@ -466,11 +497,11 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
           {/* Версия и OS */}
           <div className="grid grid-cols-2 gap-6 items-end">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900">Version</label>
+              <label className="text-xs font-bold text-slate-900">Версия</label>
               <input value={version} onChange={e => setVersion(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none" placeholder="1.0.0" />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900">OS</label>
+              <label className="text-xs font-bold text-slate-900">ОС</label>
               <div className="flex gap-2">
                 {['Win', 'Mac', 'Linux', 'iOS', 'Android'].map(os => (
                   <button key={os} onClick={() => setSelectedOS(prev => prev.includes(os) ? prev.filter(o => o !== os) : [...prev, os])}
@@ -482,9 +513,39 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
             </div>
           </div>
 
+          {/* Фото */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-900">Фото</label>
+            <label className="flex items-center gap-3 cursor-pointer w-full p-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 hover:border-blue-400 transition-colors">
+              <span className="text-lg">📎</span>
+              <span className="text-sm text-slate-500 truncate">{photoName || 'Прикрепить изображение...'}</span>
+              <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            </label>
+            {photo && (
+              <div className="relative">
+                <img
+                  src={photo}
+                  alt="скриншот"
+                  className="w-full max-h-48 object-cover rounded-xl border border-slate-100 cursor-zoom-in"
+                  onClick={() => setLightbox(true)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Lightbox */}
+          {lightbox && photo && (
+            <div
+              className="fixed inset-0 z-[2000] bg-black/80 flex items-center justify-center p-4"
+              onClick={() => setLightbox(false)}
+            >
+              <img src={photo} alt="full" className="max-w-full max-h-full rounded-xl shadow-2xl" />
+            </div>
+          )}
+
           {/* Audit Trail */}
           <div className="pt-6 border-t border-slate-50">
-            <h2 className="text-xl font-black text-slate-900 mb-6">LifeCycle Audit Trail</h2>
+            <h2 className="text-xl font-black text-slate-900 mb-6">История жизненного цикла</h2>
             <div className="grid grid-cols-2 gap-6">
               <div className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50">
                 <p className="text-[10px] font-black text-slate-400 uppercase mb-2">СОЗДАН</p>
@@ -533,7 +594,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
         {/* Футер с кнопками */}
         <div className="mt-8 flex justify-end items-center gap-6">
-          <button onClick={onClose} className="text-sm font-bold text-slate-500 uppercase">Cancel</button>
+          <button onClick={onClose} className="text-sm font-bold text-slate-500 uppercase">Отмена</button>
           {isCreator && assignedToId == null && (
             <button
               type="button"
@@ -565,7 +626,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
             </button>
           )}
           <button onClick={() => handleSave()} className="bg-blue-600 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-blue-100 hover:scale-[1.02] transition-all">
-            {isEditing ? 'Update Bug' : 'Create Bug'}
+            {isEditing ? 'Обновить баг' : 'Создать баг'}
           </button>
         </div>
       </div>

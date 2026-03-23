@@ -89,11 +89,11 @@ function Dashboard() {
         <div className="p-8 w-full">
             <div className="flex justify-between items-start mb-8">
                 <div>
-                    <h1 className="text-3xl font-black text-gray-900">Active Tasks</h1>
+                    <h1 className="text-3xl font-black text-gray-900">Активные задачи</h1>
                     
                 </div>
                 <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-700 transition-all">
-                    + Create New Task
+                    + Создать задачу
                 </button>
             </div>
 
@@ -187,7 +187,7 @@ function Sidebar() {
     return (
         <aside className="w-64 bg-[#F8FAFC] border-r border-gray-200 p-5">
             <button className="flex items-center gap-x-3 w-full p-4 bg-white rounded-lg shadow-sm text-blue-600 font-semibold">
-                📋 My Tasks
+                📋 Мои задачи
             </button>
         </aside>
     );
