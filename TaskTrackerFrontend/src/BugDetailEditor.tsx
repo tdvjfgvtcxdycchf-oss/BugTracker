@@ -62,6 +62,20 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const currentUserEmail = localStorage.getItem('userEmail') || 'Guest';
   const currentUserId = Number(localStorage.getItem('userId') || '0');
   const [lifecyclePending, setLifecyclePending] = useState(false);
+  const [photo, setPhoto] = useState<string | undefined>();
+  const [photoName, setPhotoName] = useState('');
+  const [lightbox, setLightbox] = useState(false);
+
+  const getBugPhotoKey = () => `bug_photo_${getBugId()}`;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhotoName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => setPhoto(reader.result as string);
+    reader.readAsDataURL(file);
+  };
 
   const [severity, setSeverity] = useState('Low');
   const [priority, setPriority] = useState('Low');
@@ -190,6 +204,16 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     };
   }, [isOpen, currentBug, currentUserId]);
 
+  // Загружаем фото из localStorage при открытии бага
+  useEffect(() => {
+    if (isOpen && currentBug) {
+      const saved = localStorage.getItem(`bug_photo_${currentBug.id ?? currentBug.id_pk}`);
+      if (saved) setPhoto(saved);
+      else { setPhoto(undefined); setPhotoName(''); }
+    }
+    if (isOpen && !currentBug) { setPhoto(undefined); setPhotoName(''); }
+  }, [isOpen, currentBug]);
+
   // Заполнение полей данными
   useEffect(() => {
     if (isOpen && currentBug) {
@@ -274,6 +298,13 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
       if (res.ok) {
         await refreshBugs();
+        if (photo) {
+          // Для нового бага ID придёт из обновлённого списка — берём максимальный
+          const bugsRes = await fetch(`${baseUrl}/bugs/${task.id}`);
+          const bugs = await bugsRes.json().catch(() => []);
+          const targetId = isEditing ? getBugId() : Math.max(...bugs.map((b: any) => b.id));
+          if (targetId) localStorage.setItem(`bug_photo_${targetId}`, photo);
+        }
         if (opts?.closeOnSuccess !== false) onClose();
       }
     } catch (err) { console.error(err); }
@@ -481,6 +512,36 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
               </div>
             </div>
           </div>
+
+          {/* Фото */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-900">Фото</label>
+            <label className="flex items-center gap-3 cursor-pointer w-full p-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 hover:border-blue-400 transition-colors">
+              <span className="text-lg">📎</span>
+              <span className="text-sm text-slate-500 truncate">{photoName || 'Прикрепить изображение...'}</span>
+              <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+            </label>
+            {photo && (
+              <div className="relative">
+                <img
+                  src={photo}
+                  alt="скриншот"
+                  className="w-full max-h-48 object-cover rounded-xl border border-slate-100 cursor-zoom-in"
+                  onClick={() => setLightbox(true)}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Lightbox */}
+          {lightbox && photo && (
+            <div
+              className="fixed inset-0 z-[2000] bg-black/80 flex items-center justify-center p-4"
+              onClick={() => setLightbox(false)}
+            >
+              <img src={photo} alt="full" className="max-w-full max-h-full rounded-xl shadow-2xl" />
+            </div>
+          )}
 
           {/* Audit Trail */}
           <div className="pt-6 border-t border-slate-50">
