@@ -11,6 +11,7 @@ function Dashboard() {
     const [selectedBugId, setSelectedBugId] = useState<string | undefined>();
     const [tasks, setTasks] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const currentUserId = Number(localStorage.getItem('userId') || '0');
 
     const fetchTasks = async () => {
         setIsLoading(true);
@@ -24,6 +25,34 @@ function Dashboard() {
     };
 
     useEffect(() => { fetchTasks(); }, []);
+
+    const handleDeleteTask = async (taskId: number) => {
+        if (!taskId || !currentUserId) return;
+        if (!confirm('Удалить таску?')) return;
+
+        try {
+            const baseUrl = (import.meta as any).env.VITE_API_URL;
+            const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ owner_id: currentUserId }),
+            });
+
+            if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+
+            // Сбрасываем открытые модалки/редактор если удалили текущую
+            if (selectedTask?.id === taskId) {
+                setSelectedTask(null);
+                setIsEditorOpen(false);
+                setSelectedBugId(undefined);
+            }
+
+            await fetchTasks();
+        } catch (err: any) {
+            console.error(err);
+            alert('Не удалось удалить таску');
+        }
+    };
 
     // Обновление списка багов в конкретной задаче
     const handleBugSavedInState = (updatedBugs: any[]) => {
@@ -73,10 +102,23 @@ function Dashboard() {
             ) : (
                 <div className="space-y-3">
                     {tasks.map(task => (
-                        <div key={task.id} onClick={() => setSelectedTask(task)} className="grid grid-cols-12 items-center bg-white p-4 cursor-pointer hover:shadow-md rounded-xl border border-gray-100 transition-all">
+                        <div
+                            key={task.id}
+                            onClick={() => setSelectedTask(task)}
+                            className="relative grid grid-cols-12 items-center bg-white p-4 cursor-pointer hover:shadow-md rounded-xl border border-gray-100 transition-all"
+                        >
                             <div className="col-span-2 text-sm font-bold text-blue-600">ID-{task.id}</div>
                             <div className="col-span-3 font-bold text-gray-900 truncate pr-4">{task.title}</div>
                             <div className="col-span-7 text-sm text-gray-500 truncate">{task.description || "Нет описания"}</div>
+                            {task.owner_id === currentUserId && (
+                                <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-red-600 bg-red-50 border border-red-100 px-3 py-1 rounded-lg hover:bg-red-100"
+                                >
+                                    Удалить
+                                </button>
+                            )}
                         </div>
                     ))}
                 </div>

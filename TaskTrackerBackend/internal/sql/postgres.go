@@ -288,7 +288,6 @@ func ChangeBug(ctx context.Context, conn *pgxpool.Pool, bug Bug, assignedEmail s
 			bug.AssignedTime = &now
 		} else if err != pgx.ErrNoRows {
 			slog.Error("error finding user by email", "email", assignedEmail, "error", err)
-			// Не прерываемся, пробуем обновить остальные поля
 		}
 	}
 
@@ -311,7 +310,6 @@ func ChangeBug(ctx context.Context, conn *pgxpool.Pool, bug Bug, assignedEmail s
 	)
 
 	if err != nil {
-		// ЭТА СТРОКА ОЧЕНЬ ВАЖНА: она скажет, на какое поле ругается база
 		slog.Error("UPDATE Bug failed", "error", err, "bug_id", bug.Id)
 		return err
 	}
@@ -319,4 +317,46 @@ func ChangeBug(ctx context.Context, conn *pgxpool.Pool, bug Bug, assignedEmail s
 	slog.Info("bug updated successfully", "id", bug.Id)
 
 	return err
+}
+
+func DeleteTask(ctx context.Context, conn *pgxpool.Pool, taskID int, ownerID int) (bool, error) {
+	var deletedID int
+	err := conn.QueryRow(
+		ctx,
+		`DELETE FROM Task
+		 WHERE id_pk = $1 AND owner_id_fk = $2
+		 RETURNING id_pk`,
+		taskID,
+		ownerID,
+	).Scan(&deletedID)
+
+	if err == pgx.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func DeleteBug(ctx context.Context, conn *pgxpool.Pool, bugID int, creatorID int) (bool, error) {
+	var deletedID int
+	err := conn.QueryRow(
+		ctx,
+		`DELETE FROM Bug
+		 WHERE id_pk = $1 AND created_by_fk = $2
+		 RETURNING id_pk`,
+		bugID,
+		creatorID,
+	).Scan(&deletedID)
+
+	if err == pgx.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }

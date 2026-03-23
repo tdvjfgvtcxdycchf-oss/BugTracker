@@ -81,3 +81,11 @@ func (t *TaskTrackerService) CreateBug(ctx context.Context, bug sql.Bug) error {
 func (t *TaskTrackerService) UpdateBug(ctx context.Context, bug sql.Bug, assignedEmail string) error {
 	return sql.ChangeBug(ctx, t.conn, bug, assignedEmail)
 }
+
+func (t *TaskTrackerService) DeleteTask(ctx context.Context, taskID int, ownerID int) (bool, error) {
+	return sql.DeleteTask(ctx, t.conn, taskID, ownerID)
+}
+
+func (t *TaskTrackerService) DeleteBug(ctx context.Context, bugID int, creatorID int) (bool, error) {
+	return sql.DeleteBug(ctx, t.conn, bugID, creatorID)
+}

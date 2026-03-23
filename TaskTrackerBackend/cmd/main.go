@@ -32,12 +32,12 @@ func CORS(next http.Handler) http.Handler {
 func main() {
 	logPath := "logs/app.log"
 	if err := os.MkdirAll(filepath.Dir(logPath), 0755); err != nil {
-		slog.Error("error", err)
+		slog.Error("error creating log directory", "error", err)
 		os.Exit(1)
 	}
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		slog.Error("error", err)
+		slog.Error("error opening log file", "error", err)
 		os.Exit(1)
 	}
 	defer logFile.Close()

@@ -47,8 +47,10 @@ func NewRouter(ctx context.Context, conn *pgxpool.Pool) http.Handler {
 	router.Path("/login").Methods("POST").HandlerFunc(HandleGetIdUser(svc))
 	router.Path("/tasks").Methods("POST").HandlerFunc(HandleCreateTask(svc))
 	router.Path("/tasks").Methods("GET").HandlerFunc(HandleGetAllTasks(svc))
+	router.Path("/tasks/{id}").Methods("DELETE").HandlerFunc(HandleDeleteTask(svc))
 	router.Path("/bugs/{id}").Methods("POST").HandlerFunc(HandleCreateBug(svc))
 	router.Path("/bugs/{id}").Methods("GET").HandlerFunc(HandleFuncGetAllBugs(svc))
 	router.Path("/bugs/{id}").Methods("PATCH").HandlerFunc(HandleUpdateBug(svc))
+	router.Path("/bugs/{id}").Methods("DELETE").HandlerFunc(HandleDeleteBug(svc))
 	return router
 }

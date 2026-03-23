@@ -283,3 +283,85 @@ func HandleUpdateBug(svc *service.TaskTrackerService) http.HandlerFunc {
 		json.NewEncoder(w).Encode(updatedBugs)
 	}
 }
+
+func HandleDeleteTask(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		vars := mux.Vars(r)
+		idStr := vars["id"]
+		taskID, err := strconv.Atoi(idStr)
+		if err != nil || taskID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid task id")
+			return
+		}
+
+		var input struct {
+			OwnerId int `json:"owner_id"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if input.OwnerId <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "owner_id is required")
+			return
+		}
+
+		deleted, err := svc.DeleteTask(r.Context(), taskID, input.OwnerId)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to delete task")
+			return
+		}
+
+		if !deleted {
+			writeJSONError(w, http.StatusForbidden, "task not found or not allowed")
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+	}
+}
+
+func HandleDeleteBug(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		vars := mux.Vars(r)
+		idStr := vars["id"]
+		bugID, err := strconv.Atoi(idStr)
+		if err != nil || bugID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid bug id")
+			return
+		}
+
+		var input struct {
+			CreatedBy int `json:"created_by"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if input.CreatedBy <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "created_by is required")
+			return
+		}
+
+		deleted, err := svc.DeleteBug(r.Context(), bugID, input.CreatedBy)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to delete bug")
+			return
+		}
+
+		if !deleted {
+			writeJSONError(w, http.StatusForbidden, "bug not found or not allowed")
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+	}
+}

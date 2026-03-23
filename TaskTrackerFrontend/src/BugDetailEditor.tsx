@@ -76,6 +76,16 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const [assignableEmailsPending, setAssignableEmailsPending] = useState(false);
   const [assignedToEmailChoice, setAssignedToEmailChoice] = useState('');
 
+  useEffect(() => {
+    if (isOpen && currentUserId > 0 && currentUserEmail) {
+      setUsers(prev => {
+        const exists = prev.some(u => u.id_pk === currentUserId || u.id === currentUserId);
+        if (exists) return prev;
+        return [...prev, { id_pk: currentUserId, email: currentUserEmail }];
+      });
+    }
+  }, [isOpen, currentUserId, currentUserEmail]);
+
   // Разрешаем id -> email для жизненного цикла.
   // В бэкенде нет endpoint "GET /users" (список всех), зато есть "GET /users/{id}"
   // которое возвращает все email, кроме текущего id. Мы реконструируем нужный email как
@@ -479,7 +489,8 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
               <div className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50">
                 <p className="text-[10px] font-black text-slate-400 uppercase mb-2">СОЗДАН</p>
                 <p className="font-bold text-slate-900">
-                  {createdById != null ? getUserEmail(createdById) : currentUserEmail}
+                  {/* Если ID создателя совпадает с твоим — пишем почту из localStorage напрямую */}
+                  {createdById === currentUserId ? currentUserEmail : getUserEmail(createdById)}
                 </p>
                 {isEditing && createdTime && (
                   <p className="text-[10px] text-slate-400 mt-1">

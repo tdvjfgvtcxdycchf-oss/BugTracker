@@ -11,23 +11,50 @@ interface BugsModalProps {
 export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedBugId, onBugsLoaded }: BugsModalProps) {
   const [bugs, setBugs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const currentUserId = Number(localStorage.getItem('userId') || '0');
+  const [pendingDeleteBugId, setPendingDeleteBugId] = useState<number | null>(null);
+
+  const fetchBugs = async () => {
+    if (!task?.id) return;
+    setLoading(true);
+    try {
+      const baseUrl = (import.meta as any).env.VITE_API_URL;
+      const response = await fetch(`${baseUrl}/bugs/${task.id}`);
+      const data = await response.json();
+      const loadedBugs = data || [];
+      setBugs(loadedBugs);
+      onBugsLoaded(loadedBugs); // Синхронизируем с Dashboard
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  };
 
   useEffect(() => {
-    const fetchBugs = async () => {
-      if (!task?.id) return;
-      setLoading(true);
-      try {
-        const baseUrl = (import.meta as any).env.VITE_API_URL;
-        const response = await fetch(`${baseUrl}/bugs/${task.id}`);
-        const data = await response.json();
-        const loadedBugs = data || [];
-        setBugs(loadedBugs);
-        onBugsLoaded(loadedBugs); // Синхронизируем с Dashboard
-      } catch (err) { console.error(err); }
-      finally { setLoading(false); }
-    };
     fetchBugs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task?.id]);
+
+  const handleDeleteBug = async (bugId: number) => {
+    if (!bugId || !currentUserId) return;
+    if (!confirm('Удалить баг?')) return;
+
+    setPendingDeleteBugId(bugId);
+    try {
+      const baseUrl = (import.meta as any).env.VITE_API_URL;
+      const res = await fetch(`${baseUrl}/bugs/${bugId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ created_by: currentUserId }),
+      });
+
+      if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+      await fetchBugs();
+    } catch (err) {
+      console.error(err);
+      alert('Не удалось удалить баг');
+    } finally {
+      setPendingDeleteBugId(null);
+    }
+  };
 
   if (!task) return null;
 
@@ -53,7 +80,19 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
                   <div className="w-2 h-2 bg-red-500 rounded-full"></div>
                   <span className="text-sm font-bold text-gray-700">Bug ID: {bug.id}</span>
                 </div>
-                <span className="text-[10px] font-bold text-red-400 uppercase">{bug.status}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-bold text-red-400 uppercase">{bug.status}</span>
+                  {bug.created_by === currentUserId && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteBug(bug.id); }}
+                      disabled={pendingDeleteBugId === bug.id}
+                      className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-100 px-2 py-1 rounded-lg hover:bg-red-100 disabled:opacity-60"
+                    >
+                      {pendingDeleteBugId === bug.id ? 'Удаляю…' : 'Удалить'}
+                    </button>
+                  )}
+                </div>
               </div>
             ))
           ) : (
