@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func loggingMiddleware(next http.Handler) http.Handler {
@@ -36,18 +36,19 @@ func (w *responseWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-func NewRouter(ctx context.Context, conn *pgx.Conn) http.Handler {
+func NewRouter(ctx context.Context, conn *pgxpool.Pool) http.Handler {
 	svc := service.NewTaskTrackerService(conn)
 
 	router := mux.NewRouter()
 	router.Use(loggingMiddleware)
 
-	router.Path("/users").Methods("POST").HandlerFunc(HandleCreateUser(ctx, svc))
-	router.Path("/login").Methods("POST").HandlerFunc(HandleGetIdUser(ctx, svc))
-	router.Path("/tasks").Methods("POST").HandlerFunc(HandleCreateTask(ctx, svc))
-	router.Path("/tasks").Methods("GET").HandlerFunc(HandleGetAllTasks(ctx, svc))
-	router.Path("/bugs/{id}").Methods("POST").HandlerFunc(HandleCreateBug(ctx, svc))
-	router.Path("/bugs/{id}").Methods("GET").HandlerFunc(HandleFuncGetAllBugs(ctx, svc))
-	router.Path("/bugs/{id}").Methods("PATCH").HandlerFunc(HandleUpdateBug(ctx, svc))
+	router.Path("/users").Methods("POST").HandlerFunc(HandleCreateUser(svc))
+	router.Path("/users/{id}").Methods("GET").HandlerFunc(HandleGetOtherEmails(svc))
+	router.Path("/login").Methods("POST").HandlerFunc(HandleGetIdUser(svc))
+	router.Path("/tasks").Methods("POST").HandlerFunc(HandleCreateTask(svc))
+	router.Path("/tasks").Methods("GET").HandlerFunc(HandleGetAllTasks(svc))
+	router.Path("/bugs/{id}").Methods("POST").HandlerFunc(HandleCreateBug(svc))
+	router.Path("/bugs/{id}").Methods("GET").HandlerFunc(HandleFuncGetAllBugs(svc))
+	router.Path("/bugs/{id}").Methods("PATCH").HandlerFunc(HandleUpdateBug(svc))
 	return router
 }

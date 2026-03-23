@@ -7,14 +7,14 @@ import (
 	"log/slog"
 	"strconv"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type TaskTrackerService struct {
-	conn *pgx.Conn
+	conn *pgxpool.Pool
 }
 
-func NewTaskTrackerService(conn *pgx.Conn) *TaskTrackerService {
+func NewTaskTrackerService(conn *pgxpool.Pool) *TaskTrackerService {
 	return &TaskTrackerService{conn: conn}
 }
 
@@ -58,6 +58,10 @@ func (t *TaskTrackerService) Login(ctx context.Context, user sql.User) (int, err
 	return existingUser.Id, nil
 }
 
+func (t *TaskTrackerService) GetOtherUsersEmails(ctx context.Context, excludeId int) ([]string, error) {
+	return sql.GetOtherUsersEmails(ctx, t.conn, excludeId)
+}
+
 func (t *TaskTrackerService) GetAllTasks(ctx context.Context) ([]sql.Task, error) {
 	return sql.GetAllTasks(ctx, t.conn)
 }
@@ -74,6 +78,6 @@ func (t *TaskTrackerService) CreateBug(ctx context.Context, bug sql.Bug) error {
 	return sql.CreateBug(ctx, t.conn, bug)
 }
 
-func (t *TaskTrackerService) UpdateBug(ctx context.Context, bug sql.Bug) error {
-	return sql.ChangeBug(ctx, t.conn, bug)
+func (t *TaskTrackerService) UpdateBug(ctx context.Context, bug sql.Bug, assignedEmail string) error {
+	return sql.ChangeBug(ctx, t.conn, bug, assignedEmail)
 }

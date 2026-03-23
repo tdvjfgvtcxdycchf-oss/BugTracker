@@ -3,7 +3,6 @@ package server
 import (
 	"bug_tracker/internal/service"
 	"bug_tracker/internal/sql"
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -20,7 +19,7 @@ func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	})
 }
 
-func HandleCreateUser(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
+func HandleCreateUser(svc *service.TaskTrackerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -46,7 +45,7 @@ func HandleCreateUser(ctx context.Context, svc *service.TaskTrackerService) http
 			return
 		}
 
-		createdUserId, err := svc.Register(ctx, user)
+		createdUserId, err := svc.Register(r.Context(), user)
 		if err != nil {
 			if err.Error() == "user already exists" {
 				w.WriteHeader(http.StatusConflict)
@@ -62,7 +61,7 @@ func HandleCreateUser(ctx context.Context, svc *service.TaskTrackerService) http
 	}
 }
 
-func HandleGetIdUser(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
+func HandleGetIdUser(svc *service.TaskTrackerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -88,7 +87,7 @@ func HandleGetIdUser(ctx context.Context, svc *service.TaskTrackerService) http.
 			return
 		}
 
-		loginedUserId, err := svc.Login(ctx, user)
+		loginedUserId, err := svc.Login(r.Context(), user)
 		if err != nil {
 			if err.Error() == "user not exist" {
 				w.WriteHeader(http.StatusUnauthorized)
@@ -104,11 +103,37 @@ func HandleGetIdUser(ctx context.Context, svc *service.TaskTrackerService) http.
 	}
 }
 
-func HandleGetAllTasks(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
+func HandleGetOtherEmails(svc *service.TaskTrackerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		tasks, err := svc.GetAllTasks(ctx)
+		vars := mux.Vars(r)
+		excludeStr := vars["id"]
+
+		excludeId, err := strconv.Atoi(excludeStr)
+		if err != nil {
+			slog.Error("invalid id in path", "id", excludeStr)
+			writeJSONError(w, http.StatusBadRequest, "invalid user ID format")
+			return
+		}
+
+		emails, err := svc.GetOtherUsersEmails(r.Context(), excludeId)
+		if err != nil {
+			slog.Error("failed to fetch emails", "error", err)
+			writeJSONError(w, http.StatusInternalServerError, "could not fetch emails")
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(emails)
+	}
+}
+
+func HandleGetAllTasks(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		tasks, err := svc.GetAllTasks(r.Context())
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "could not fetch tasks")
 			return
@@ -119,7 +144,7 @@ func HandleGetAllTasks(ctx context.Context, svc *service.TaskTrackerService) htt
 	}
 }
 
-func HandleCreateTask(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
+func HandleCreateTask(svc *service.TaskTrackerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -145,12 +170,12 @@ func HandleCreateTask(ctx context.Context, svc *service.TaskTrackerService) http
 			return
 		}
 
-		if err := svc.CreateTask(ctx, task); err != nil {
+		if err := svc.CreateTask(r.Context(), task); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "could not fetch tasks")
 			return
 		}
 
-		tasks, err := svc.GetAllTasks(ctx)
+		tasks, err := svc.GetAllTasks(r.Context())
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "could not fetch tasks")
 			return
@@ -161,7 +186,7 @@ func HandleCreateTask(ctx context.Context, svc *service.TaskTrackerService) http
 	}
 }
 
-func HandleFuncGetAllBugs(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
+func HandleFuncGetAllBugs(svc *service.TaskTrackerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -174,7 +199,7 @@ func HandleFuncGetAllBugs(ctx context.Context, svc *service.TaskTrackerService) 
 			return
 		}
 
-		bugs, err := svc.GetAllBugs(ctx, id)
+		bugs, err := svc.GetAllBugs(r.Context(), id)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "could not fetch bugs")
 			return
@@ -185,7 +210,7 @@ func HandleFuncGetAllBugs(ctx context.Context, svc *service.TaskTrackerService) 
 	}
 }
 
-func HandleCreateBug(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
+func HandleCreateBug(svc *service.TaskTrackerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -208,12 +233,12 @@ func HandleCreateBug(ctx context.Context, svc *service.TaskTrackerService) http.
 
 		bug.TaskId = id
 
-		if err := svc.CreateBug(ctx, bug); err != nil {
+		if err := svc.CreateBug(r.Context(), bug); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "could not fetch bugs")
 			return
 		}
 
-		bugs, err := svc.GetAllBugs(ctx, id)
+		bugs, err := svc.GetAllBugs(r.Context(), id)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "could not fetch bugs")
 			return
@@ -224,40 +249,37 @@ func HandleCreateBug(ctx context.Context, svc *service.TaskTrackerService) http.
 	}
 }
 
-func HandleUpdateBug(ctx context.Context, svc *service.TaskTrackerService) http.HandlerFunc {
+func HandleUpdateBug(svc *service.TaskTrackerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		var bug sql.Bug
+		var input struct {
+			sql.Bug
+			AssignedToEmail string `json:"assigned_to_email"`
+		}
 
-		if err := json.NewDecoder(r.Body).Decode(&bug); err != nil {
-			slog.Error("Failed to decode bug body", "error", err)
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			slog.Error("failed to decode bug body", "error", err)
 			writeJSONError(w, http.StatusBadRequest, "invalid request body")
 			return
 		}
 
 		vars := mux.Vars(r)
-		bugID, err := strconv.Atoi(vars["id"])
-		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid bug id")
-			return
-		}
-		bug.Id = bugID
+		bugID, _ := strconv.Atoi(vars["id"])
+		input.Bug.Id = bugID
 
-		if err := svc.UpdateBug(r.Context(), bug); err != nil {
-			slog.Error("Failed to update bug in DB", "error", err, "bug_id", bug.Id)
+		if err := svc.UpdateBug(r.Context(), input.Bug, input.AssignedToEmail); err != nil {
+			slog.Error("failed to update bug", "error", err)
 			writeJSONError(w, http.StatusInternalServerError, "failed to update bug")
 			return
 		}
 
-		updatedBugs, err := svc.GetAllBugs(r.Context(), bug.TaskId)
+		updatedBugs, err := svc.GetAllBugs(r.Context(), input.Bug.TaskId)
 		if err != nil {
-			slog.Error("Failed to fetch updated bugs list", "error", err, "task_id", bug.TaskId)
-			writeJSONError(w, http.StatusInternalServerError, "bug updated, but failed to fetch new list")
+			writeJSONError(w, http.StatusInternalServerError, "failed to fetch list")
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(updatedBugs)
 	}
 }

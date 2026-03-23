@@ -1,233 +1,565 @@
 import React, { useState, useEffect } from 'react';
 
-interface BugDetailEditorProps {
-  isOpen: boolean;
-  onClose: () => void;
-  task: any;
-  bugId?: string | number;
-  onBugSaved: (updatedBugs: any[]) => void;
+// Интерфейсы данных
+interface Bug {
+  // Основные поля из API (json tags в Go бэкенде)
+  id?: number;
+  task_id?: number;
+
+  // Старые/альтернативные имена, которые могут встречаться в уже загруженных данных
+  id_pk?: number;
+  task_id_fk?: number;
+  severity: string;
+  priority: string;
+  status: string;
+  description: string;
+  playback_description: string;
+  expected_result: string; // Ожидаемый результат
+  actual_result: string;   // Фактический результат
+  version_product: string;
+  os: string;
+  // Кто создал
+  created_by?: number;
+  created_by_fk?: number;
+  created_time?: string;
+
+  // Кто закреплён
+  assigned_to?: number | null;
+  assigned_to_fk?: number | null;
+  assigned_time?: string | null;
+
+  // Кто сдал
+  passed_by?: number | null;
+  passed_by_fk?: number | null;
+  passed_time?: string | null;
+
+  // Кто принял
+  accepted_by?: number | null;
+  accepted_by_fk?: number | null;
+  accepted_time?: string | null;
 }
 
-export default function BugDetailEditor({ isOpen, onClose, task, bugId, onBugSaved }: BugDetailEditorProps) {
+interface User {
+  id_pk?: number;
+  id?: number;
+  email: string;
+}
+
+interface Props {
+  isOpen: boolean;
+  onClose: () => void;
+  task: { id: number };
+  currentBug: Bug | null;
+  onBugSaved: (data: any) => void;
+  bugId?: string | number | null;
+}
+
+const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, onBugSaved, bugId }) => {
+  const isEditing = !!currentBug || !!bugId;
+  
+  // Состояния
+  const [users, setUsers] = useState<User[]>([]);
+  const currentUserEmail = localStorage.getItem('userEmail') || 'Guest';
+  const currentUserId = Number(localStorage.getItem('userId') || '0');
+  const [lifecyclePending, setLifecyclePending] = useState(false);
+
+  const [severity, setSeverity] = useState('Low');
+  const [priority, setPriority] = useState('Low');
+  const [status, setStatus] = useState('Open');
   const [description, setDescription] = useState('');
   const [steps, setSteps] = useState('');
-  const [expected, setExpected] = useState('');
-  const [actual, setActual] = useState('');
-  const [severity, setSeverity] = useState('Major');
-  const [priority, setPriority] = useState('High');
-  const [status, setStatus] = useState('New');
-  const [version, setVersion] = useState('v1.0.0');
-  const [selectedOS, setSelectedOS] = useState<string[]>(['Web']);
-  const [currentBug, setCurrentBug] = useState<any>(null);
+  const [expected, setExpected] = useState(''); // Состояние для ожидаемого
+  const [actual, setActual] = useState('');     // Состояние для фактического
+  const [version, setVersion] = useState('');
+  const [selectedOS, setSelectedOS] = useState<string[]>([]);
+  const [assignableEmails, setAssignableEmails] = useState<string[]>([]);
+  const [assignableEmailsPending, setAssignableEmailsPending] = useState(false);
+  const [assignedToEmailChoice, setAssignedToEmailChoice] = useState('');
 
-  const currentUserEmail = localStorage.getItem('userEmail') || 'Unknown User';
-  const osOptions = ['Android', 'iOS', 'Web', 'macOS', 'Windows', 'Linux'];
-
+  // Разрешаем id -> email для жизненного цикла.
+  // В бэкенде нет endpoint "GET /users" (список всех), зато есть "GET /users/{id}"
+  // которое возвращает все email, кроме текущего id. Мы реконструируем нужный email как
+  // "тот, которого нет в списке исключённых".
   useEffect(() => {
-    if (isOpen && task) {
-      const bug = task.bugs?.find((b: any) => String(b.id) === String(bugId));
-      
-      if (bug) {
-        setCurrentBug(bug);
-        setDescription(bug.description || '');
-        setSteps(bug.playback_description || '');
-        setExpected(bug.expected_result || '');
-        setActual(bug.actual_result || '');
-        setSeverity(bug.severity || 'Major');
-        setPriority(bug.priority || 'High');
-        setStatus(bug.status || 'New');
-        setVersion(bug.version_product || 'v1.0.0');
-        setSelectedOS(bug.os ? bug.os.split(', ') : ['Web']);
-      } else {
-        setCurrentBug(null);
-        setDescription(''); setSteps(''); setExpected(''); setActual('');
-        setSeverity('Major'); setPriority('High'); setStatus('New');
-        setVersion('v1.0.0'); setSelectedOS(['Web']);
-      }
-    }
-  }, [bugId, isOpen, task]);
+    if (!isOpen || !currentBug) return;
 
-  const handleSave = async () => {
-  // Проверка обязательного поля
-  if (!description) return alert("Description is required");
-
-  const payload = {
-    task_id: task.id,
-    severity,
-    priority,
-    status,
-    os: selectedOS.join(', '),
-    version_product: version,
-    description,
-    playback_description: steps,
-    expected_result: expected,
-    actual_result: actual,
-    // Не забываем ID пользователя для бэкенда
-    created_by: Number(localStorage.getItem('userId')) 
-  };
-
-  try {
     const baseUrl = (import.meta as any).env.VITE_API_URL;
-    
-    // Если bugId есть — PATCH на /bugs/{id}, если нет — POST на создание
-    const url = bugId 
-      ? `${baseUrl}/bugs/${bugId}` 
-      : `${baseUrl}/bugs/${task.id}`;
 
-    const method = bugId ? 'PATCH' : 'POST';
+    const ids = [
+      currentBug.created_by ?? currentBug.created_by_fk,
+      currentBug.assigned_to ?? currentBug.assigned_to_fk,
+      currentBug.passed_by ?? currentBug.passed_by_fk,
+      currentBug.accepted_by ?? currentBug.accepted_by_fk,
+    ].filter((x): x is number => typeof x === 'number' && x > 0);
 
-    const response = await fetch(url, {
-      method: method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    // Чтобы реконструкция id->email работала даже когда есть только один id,
+    // добавим текущего пользователя (если он не в списке).
+    if (currentUserId > 0 && !ids.includes(currentUserId)) ids.push(currentUserId);
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'Ошибка при сохранении');
+    if (ids.length === 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const results = await Promise.all(
+          ids.map(async (id) => {
+            const res = await fetch(`${baseUrl}/users/${id}`);
+            const emails = (await res.json()) as string[];
+            return { id, emails };
+          })
+        );
+
+        const union = new Set<string>();
+        const excludedById = new Map<number, Set<string>>();
+
+        for (const { id, emails } of results) {
+          const excluded = new Set(emails);
+          excludedById.set(id, excluded);
+          emails.forEach((e) => union.add(e));
+        }
+
+        const resolvedUsers: User[] = ids.map((id) => {
+          const excluded = excludedById.get(id) ?? new Set<string>();
+          const missing = [...union].find((e) => !excluded.has(e));
+          return {
+            id_pk: id,
+            email: missing ?? `User #${id}`,
+          };
+        });
+
+        if (!cancelled) setUsers(resolvedUsers);
+      } catch (err) {
+        console.error('Ошибка резолвинга email:', err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, currentBug]);
+
+  // Список email для "закрепить за" (только создателю и только если ещё не закреплено).
+  useEffect(() => {
+    if (!isOpen || !currentBug) return;
+
+    const creatorId = currentBug.created_by ?? currentBug.created_by_fk;
+    const assignedId = currentBug.assigned_to ?? currentBug.assigned_to_fk;
+
+    if (!creatorId) return;
+    if (assignedId == null) {
+      // ok, ещё не закреплено
+    } else {
+      return;
     }
 
-    // Бэкенд теперь возвращает весь список багов задачи
-    const updatedBugs = await response.json();
-    
-    if (typeof onBugSaved === 'function') {
-      onBugSaved(updatedBugs);
-      onClose();
+    if (currentUserId !== creatorId) return;
+
+    const baseUrl = (import.meta as any).env.VITE_API_URL;
+
+    let cancelled = false;
+    setAssignableEmailsPending(true);
+
+    (async () => {
+      try {
+        const res = await fetch(`${baseUrl}/users/${creatorId}`);
+        const emails = (await res.json()) as string[];
+        if (!cancelled) {
+          setAssignableEmails(Array.isArray(emails) ? emails : []);
+          setAssignedToEmailChoice('');
+        }
+      } catch (err) {
+        console.error('Ошибка загрузки email для закрепления:', err);
+      } finally {
+        if (!cancelled) setAssignableEmailsPending(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, currentBug, currentUserId]);
+
+  // Заполнение полей данными
+  useEffect(() => {
+    if (isOpen && currentBug) {
+      setSeverity(currentBug.severity || 'Low');
+      setPriority(currentBug.priority || 'Low');
+      setStatus(currentBug.status || 'Open');
+      setDescription(currentBug.description || '');
+      setSteps(currentBug.playback_description || '');
+      setExpected(currentBug.expected_result || ''); // Заполняем ожидаемый
+      setActual(currentBug.actual_result || '');     // Заполняем фактический
+      setVersion(currentBug.version_product || '');
+      setSelectedOS(currentBug.os ? currentBug.os.split(', ') : []);
     }
-    } catch (err: any) {
-      console.error("Save error:", err);
-      alert(err.message);
+  }, [currentBug, isOpen]);
+
+  // Поиск почты по ID (created_by_fk)
+  const getUserEmail = (id?: number) => {
+    if (!id) return '—';
+    const found = users.find(u => u.id_pk === id || u.id === id);
+    return found ? found.email : `User #${id}`;
+  };
+
+  const getBugId = () => currentBug?.id ?? currentBug?.id_pk ?? bugId;
+  const getCreatedById = () => currentBug?.created_by ?? currentBug?.created_by_fk;
+  const getAssignedToId = () => currentBug?.assigned_to ?? currentBug?.assigned_to_fk;
+  const getPassedById = () => currentBug?.passed_by ?? currentBug?.passed_by_fk;
+  const getAcceptedById = () => currentBug?.accepted_by ?? currentBug?.accepted_by_fk;
+
+  const createdTime = currentBug?.created_time;
+  const assignedTime = currentBug?.assigned_time;
+  const passedTime = currentBug?.passed_time;
+  const acceptedTime = currentBug?.accepted_time;
+
+  const formatDate = (value?: string | null) => {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString();
+  };
+
+  const refreshBugs = async () => {
+    const baseUrl = (import.meta as any).env.VITE_API_URL;
+    const res = await fetch(`${baseUrl}/bugs/${task.id}`);
+    const updatedBugs = await res.json().catch(() => []);
+    onBugSaved(updatedBugs);
+  };
+
+  const handleSave = async (opts?: { closeOnSuccess?: boolean }) => {
+    const userId = Number(localStorage.getItem('userId'));
+    const payload: any = {
+      created_by: userId,
+      severity, priority, status, description,
+      playback_description: steps,
+      expected_result: expected, // Отправляем ожидаемый
+      actual_result: actual,     // Отправляем фактический
+      version_product: version,
+      os: selectedOS.join(', '),
+      task_id: task.id,
+      assigned_to_email: assignedToEmailChoice || ''
+    };
+
+    if (isEditing && currentBug) {
+      payload.assigned_to = getAssignedToId() ?? null;
+      payload.assigned_time = assignedTime ?? null;
+      payload.passed_by = getPassedById() ?? null;
+      payload.passed_time = passedTime ?? null;
+      payload.accepted_by = getAcceptedById() ?? null;
+      payload.accepted_time = acceptedTime ?? null;
+    }
+
+    try {
+      const baseUrl = (import.meta as any).env.VITE_API_URL;
+      const url = isEditing 
+        ? `${baseUrl}/bugs/${getBugId()}`
+        : `${baseUrl}/bugs/${task?.id}`;
+      
+      const res = await fetch(url, {
+        method: isEditing ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        await refreshBugs();
+        if (opts?.closeOnSuccess !== false) onClose();
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const handlePass = async () => {
+    const bugPk = getBugId();
+    if (!bugPk) return;
+
+    setLifecyclePending(true);
+    try {
+      const baseUrl = (import.meta as any).env.VITE_API_URL;
+      const nowIso = new Date().toISOString();
+
+      const payload: any = {
+        task_id: task.id,
+        severity, priority, status, description,
+        playback_description: steps,
+        expected_result: expected,
+        actual_result: actual,
+        version_product: version,
+        os: selectedOS.join(', '),
+        assigned_to: getAssignedToId() ?? null,
+        assigned_time: assignedTime ?? null,
+        passed_by: currentUserId || null,
+        passed_time: nowIso,
+        accepted_by: getAcceptedById() ?? null,
+        accepted_time: acceptedTime ?? null,
+      };
+
+      const res = await fetch(`${baseUrl}/bugs/${bugPk}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        await refreshBugs();
+        // Оставляем модал открытым, чтобы сразу увидеть обновлённый audit trail.
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLifecyclePending(false);
     }
   };
+
+  const handleAccept = async () => {
+    const bugPk = getBugId();
+    if (!bugPk) return;
+
+    setLifecyclePending(true);
+    try {
+      const baseUrl = (import.meta as any).env.VITE_API_URL;
+      const nowIso = new Date().toISOString();
+
+      const payload: any = {
+        task_id: task.id,
+        severity, priority, status, description,
+        playback_description: steps,
+        expected_result: expected,
+        actual_result: actual,
+        version_product: version,
+        os: selectedOS.join(', '),
+        assigned_to: getAssignedToId() ?? null,
+        assigned_time: assignedTime ?? null,
+        passed_by: getPassedById() ?? null,
+        passed_time: passedTime ?? null,
+        accepted_by: currentUserId || null,
+        accepted_time: nowIso,
+      };
+
+      const res = await fetch(`${baseUrl}/bugs/${bugPk}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        await refreshBugs();
+        // Оставляем модал открытым, чтобы сразу увидеть обновлённый audit trail.
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLifecyclePending(false);
+    }
+  };
+
+  const createdById = getCreatedById();
+  const assignedToId = getAssignedToId();
+  const passedById = getPassedById();
+  const acceptedById = getAcceptedById();
+
+  const isCreator = createdById != null && currentUserId === createdById;
+  const isAssignee = assignedToId != null && currentUserId === assignedToId;
+  const canPass = isAssignee && (passedById == null);
+  const canAccept = isCreator && (passedById != null) && (acceptedById == null);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[300] bg-slate-900/40 backdrop-blur-sm flex justify-center items-center p-4 text-slate-900">
-      <div className="bg-white w-full max-w-5xl rounded-[2.5rem] shadow-2xl flex flex-col max-h-[95vh] border border-slate-200 overflow-hidden">
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-[1000]">
+      <div className="bg-white w-full max-w-[900px] max-h-[90vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col p-10">
         
-        {/* Header */}
-        <div className="p-8 flex justify-between items-center border-b border-slate-100 bg-white">
-          <div>
-            <h1 className="text-3xl font-black tracking-tight">Technical Issue Report</h1>
-            <p className="text-sm text-slate-400 mt-1 font-bold uppercase tracking-widest">Task: {task?.title || '—'}</p>
+        <h1 className="text-3xl font-black text-slate-900 mb-8">
+          {isEditing ? 'Edit Bug Report' : 'Create Bug Report'}
+        </h1>
+            <h1 className="text-xl font-black text-slate-900 mb-8">
+              Bug ID: {currentBug?.id}
+            </h1>
+        <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+          {/* Селекторы */}
+          <div className="grid grid-cols-3 gap-6">
+            
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900">Severity</label>
+              <select value={severity} onChange={e => setSeverity(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none">
+                <option>Low</option><option>Medium</option><option>High</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900">Priority</label>
+              <select value={priority} onChange={e => setPriority(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none">
+                <option>Low</option><option>Medium</option><option>High</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900">Status</label>
+              <select value={status} onChange={e => setStatus(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none">
+                <option>Open</option><option>In Progress</option><option>Closed</option>
+              </select>
+            </div>
           </div>
-          <div className="flex gap-4">
-            <button onClick={onClose} className="px-6 py-2 text-slate-400 font-bold hover:text-slate-600 transition-colors">Cancel</button>
-            <button onClick={handleSave} className="px-10 py-3 bg-blue-600 text-white rounded-2xl font-black shadow-lg hover:bg-blue-700 transition-all active:scale-95">
-              {bugId ? 'Update Bug' : 'Create Bug'}
-            </button>
+
+          {isCreator && assignedToId == null && (
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900">Закрепить за (email)</label>
+              {assignableEmailsPending ? (
+                <div className="text-sm text-slate-500">Загрузка...</div>
+              ) : (
+                <select
+                  value={assignedToEmailChoice}
+                  onChange={(e) => setAssignedToEmailChoice(e.target.value)}
+                  className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none"
+                >
+                  <option value="">Выберите email</option>
+                  {assignableEmails.map((e) => (
+                    <option key={e} value={e}>
+                      {e}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {/* Описания */}
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900">Description</label>
+              <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-4 rounded-xl border-slate-100 bg-slate-50 min-h-[120px] outline-none" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900">Steps to Reproduce</label>
+              <textarea value={steps} onChange={e => setSteps(e.target.value)} className="w-full p-4 rounded-xl border-slate-100 bg-slate-50 min-h-[120px] outline-none" />
+            </div>
+          </div>
+
+          {/* ВЕРНУЛИ: Ожидаемый и фактический результаты */}
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900">Expected Result</label>
+              <textarea 
+                value={expected} 
+                onChange={e => setExpected(e.target.value)} 
+                className="w-full p-4 rounded-xl border border-slate-100 bg-slate-50 min-h-[80px] outline-none" 
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900">Actual Result</label>
+              <textarea 
+                value={actual} 
+                onChange={e => setActual(e.target.value)} 
+                className="w-full p-4 rounded-xl border border-slate-100 bg-slate-50 min-h-[80px] outline-none" 
+              />
+            </div>
+          </div>
+
+          {/* Версия и OS */}
+          <div className="grid grid-cols-2 gap-6 items-end">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900">Version</label>
+              <input value={version} onChange={e => setVersion(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none" placeholder="1.0.0" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900">OS</label>
+              <div className="flex gap-2">
+                {['Win', 'Mac', 'Linux', 'iOS', 'Android'].map(os => (
+                  <button key={os} onClick={() => setSelectedOS(prev => prev.includes(os) ? prev.filter(o => o !== os) : [...prev, os])}
+                    className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${selectedOS.includes(os) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-100'}`}>
+                    {os}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Audit Trail */}
+          <div className="pt-6 border-t border-slate-50">
+            <h2 className="text-xl font-black text-slate-900 mb-6">LifeCycle Audit Trail</h2>
+            <div className="grid grid-cols-2 gap-6">
+              <div className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50">
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">СОЗДАН</p>
+                <p className="font-bold text-slate-900">
+                  {createdById != null ? getUserEmail(createdById) : currentUserEmail}
+                </p>
+                {isEditing && createdTime && (
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {formatDate(createdTime)}
+                  </p>
+                )}
+              </div>
+              <div className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50">
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">ЗАКРЕПЛЕН ЗА</p>
+                <p className="font-bold text-slate-900">
+                  {assignedToId != null ? getUserEmail(assignedToId) : '—'}
+                </p>
+                {assignedTime && (
+                  <p className="text-[10px] text-slate-400 mt-1">{formatDate(assignedTime)}</p>
+                )}
+              </div>
+
+              <div className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50">
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">СДАЛ</p>
+                <p className="font-bold text-slate-900">
+                  {passedById != null ? getUserEmail(passedById) : '—'}
+                </p>
+                {passedTime && (
+                  <p className="text-[10px] text-slate-400 mt-1">{formatDate(passedTime)}</p>
+                )}
+              </div>
+
+              <div className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50">
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">ПРИНЯЛ</p>
+                <p className="font-bold text-slate-900">
+                  {acceptedById != null ? getUserEmail(acceptedById) : '—'}
+                </p>
+                {acceptedTime && (
+                  <p className="text-[10px] text-slate-400 mt-1">{formatDate(acceptedTime)}</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-8 bg-[#F8FAFC]">
-          <div className="grid grid-cols-3 gap-8">
-            
-            {/* Left Column (Inputs) */}
-            <div className="col-span-2 space-y-6">
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Detailed Description</label>
-                <textarea className="w-full mt-2 p-4 border border-slate-200 rounded-2xl min-h-[120px] outline-none bg-white focus:ring-2 ring-blue-500/10 transition-all" 
-                  value={description} onChange={e => setDescription(e.target.value)} placeholder="Summarize the core problem..." />
-              </div>
-
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Expected Result</label>
-                  <textarea className="w-full mt-2 p-4 border border-green-100 bg-green-50/20 rounded-2xl min-h-[100px] outline-none" 
-                    value={expected} onChange={e => setExpected(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Actual Result</label>
-                  <textarea className="w-full mt-2 p-4 border border-red-100 bg-red-50/20 rounded-2xl min-h-[100px] outline-none" 
-                    value={actual} onChange={e => setActual(e.target.value)} />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Steps to Reproduce</label>
-                <textarea className="w-full mt-2 p-4 border border-slate-200 rounded-2xl min-h-[150px] font-mono text-sm outline-none bg-white focus:ring-2 ring-blue-500/10 transition-all" 
-                  value={steps} onChange={e => setSteps(e.target.value)} />
-              </div>
-            </div>
-
-            {/* Right Column (Controls) */}
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-6 h-fit">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Severity</label>
-                  <select className="w-full p-3 bg-slate-50 rounded-xl font-bold border-none outline-none appearance-none cursor-pointer" 
-                    value={severity} onChange={e => setSeverity(e.target.value)}>
-                    <option>Critical</option><option>Major</option><option>Minor</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Priority</label>
-                  <select className="w-full p-3 bg-slate-50 rounded-xl font-bold border-none outline-none appearance-none cursor-pointer" 
-                    value={priority} onChange={e => setPriority(e.target.value)}>
-                    <option>High</option><option>Medium</option><option>Low</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Target OS</label>
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {osOptions.map(os => (
-                    <button key={os} type="button" onClick={() => setSelectedOS(prev => prev.includes(os) ? prev.filter(x => x !== os) : [...prev, os])}
-                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${selectedOS.includes(os) ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
-                      {os}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</label>
-                <select className="w-full p-3 bg-slate-50 rounded-xl font-bold border-none outline-none appearance-none cursor-pointer" 
-                  value={status} onChange={e => setStatus(e.target.value)}>
-                  <option>New</option><option>In Progress</option><option>Resolved</option><option>Closed</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Version</label>
-                <input type="text" className="w-full p-3 bg-slate-50 rounded-xl font-bold outline-none border-none focus:ring-2 ring-blue-500/10" 
-                  value={version} onChange={e => setVersion(e.target.value)} />
-              </div>
-            </div>
-          </div>
-
-          {/* Lifecycle Audit Trail */}
-          <div className="mt-12">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Lifecycle Audit Trail</label>
-            <div className="mt-4 grid grid-cols-4 gap-4">
-              <div className="bg-white border border-slate-100 p-5 rounded-3xl shadow-sm">
-                <span className="text-xs font-black text-slate-900">Создан:</span>
-                <div className="mt-2 text-sm text-slate-400 space-y-1">
-                  <p>
-                    {currentBug?.created_at 
-                      ? new Date(currentBug.created_at).toLocaleDateString() 
-                      : new Date().toLocaleDateString()}
-                  </p>
-                  <p>by <span className="text-slate-600 font-medium">{currentBug?.creator_email || currentUserEmail}</span></p>
-                </div>
-              </div>
-              
-              {['Закреплен за', 'Сдал', 'Принял'].map((label, i) => (
-                <div key={i} className="bg-white border border-slate-100 p-5 rounded-3xl shadow-sm">
-                  <span className="text-xs font-black text-slate-900">{label}:</span>
-                  <div className="mt-2 text-sm text-slate-400 space-y-1">
-                    <p>—</p>
-                    <p>by <span className="text-slate-600 font-medium">—</span></p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        {/* Футер с кнопками */}
+        <div className="mt-8 flex justify-end items-center gap-6">
+          <button onClick={onClose} className="text-sm font-bold text-slate-500 uppercase">Cancel</button>
+          {isCreator && assignedToId == null && (
+            <button
+              type="button"
+              disabled={lifecyclePending || !assignedToEmailChoice}
+              onClick={() => handleSave({ closeOnSuccess: false })}
+              className="bg-slate-900 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-slate-200 hover:scale-[1.02] transition-all disabled:opacity-60"
+            >
+              Закрепить
+            </button>
+          )}
+          {canPass && (
+            <button
+              type="button"
+              disabled={lifecyclePending}
+              onClick={handlePass}
+              className="bg-emerald-600 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-emerald-100 hover:scale-[1.02] transition-all disabled:opacity-60"
+            >
+              Сдать
+            </button>
+          )}
+          {canAccept && (
+            <button
+              type="button"
+              disabled={lifecyclePending}
+              onClick={handleAccept}
+              className="bg-purple-600 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-purple-100 hover:scale-[1.02] transition-all disabled:opacity-60"
+            >
+              Принять
+            </button>
+          )}
+          <button onClick={() => handleSave()} className="bg-blue-600 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-blue-100 hover:scale-[1.02] transition-all">
+            {isEditing ? 'Update Bug' : 'Create Bug'}
+          </button>
         </div>
       </div>
     </div>
   );
-}
+};
+
+export default BugDetailEditor;

@@ -61,7 +61,7 @@ func main() {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
-	defer conn.Close(ctx)
+	defer conn.Close()
 	slog.Info("connected to database")
 
 	router := server.NewRouter(ctx, conn)

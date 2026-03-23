@@ -61,6 +61,7 @@ function Dashboard() {
             <div className="flex justify-between items-start mb-8">
                 <div>
                     <h1 className="text-3xl font-black text-gray-900">Active Tasks</h1>
+                    
                 </div>
                 <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-700 transition-all">
                     + Create New Task
@@ -100,8 +101,13 @@ function Dashboard() {
             setIsEditorOpen(false);
             setSelectedBugId(undefined);
         }} 
-        // Ищем задачу в общем списке, чтобы данные были актуальными
+        // Ищем задачу
         task={tasks.find(t => t.id === selectedTask.id) || selectedTask} 
+        // Ищем конкретный баг внутри этой задачи по ID
+        currentBug={tasks
+            .find(t => t.id === selectedTask.id)?.bugs
+            ?.find((b: any) => b.id === Number(selectedBugId))
+        }
         bugId={selectedBugId}
         onBugSaved={handleBugSavedInState} 
     />
