@@ -74,7 +74,7 @@ function Dashboard() {
     const getColor = (id: number) => colors[id % colors.length];
 
     return (
-        <div className="p-8 w-full max-w-4xl mx-auto">
+        <div className="p-4 sm:p-8 w-full max-w-4xl mx-auto">
             <div className="flex justify-between items-center mb-8">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Задачи</h1>
@@ -194,7 +194,7 @@ function Header() {
 
 function Sidebar() {
     return (
-        <aside className="w-56 bg-gray-50 border-r border-gray-100 p-4">
+        <aside className="hidden sm:block w-56 bg-gray-50 border-r border-gray-100 p-4">
             <button className="flex items-center gap-3 w-full px-3 py-2.5 bg-white rounded-xl shadow-sm text-indigo-600 font-semibold text-sm border border-indigo-50">
                 <span>📋</span> Мои задачи
             </button>

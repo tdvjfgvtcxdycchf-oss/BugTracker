@@ -415,9 +415,9 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-[1000]">
-      <div className="bg-white w-full max-w-[900px] max-h-[90vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col p-10">
-        
-        <h1 className="text-3xl font-black text-slate-900 mb-8">
+      <div className="bg-white w-full max-w-[900px] max-h-[90vh] rounded-2xl sm:rounded-[32px] shadow-2xl overflow-hidden flex flex-col p-4 sm:p-10">
+
+        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-4 sm:mb-8">
           {isEditing ? 'Редактировать баг' : 'Создать баг'}
         </h1>
             <h1 className="text-xl font-black text-slate-900 mb-8">
@@ -425,7 +425,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
             </h1>
         <div className="flex-1 overflow-y-auto pr-2 space-y-6">
           {/* Селекторы */}
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
             
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-900">Серьёзность</label>
@@ -470,7 +470,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
           )}
 
           {/* Описания */}
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-900">Описание</label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-4 rounded-xl border border-slate-300 bg-slate-50 min-h-[120px] outline-none" />
@@ -482,7 +482,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
           </div>
 
           {/* ВЕРНУЛИ: Ожидаемый и фактический результаты */}
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-900">Ожидаемый результат</label>
               <textarea 
@@ -502,14 +502,14 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
           </div>
 
           {/* Версия и OS */}
-          <div className="grid grid-cols-2 gap-6 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 items-end">
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-900">Версия</label>
               <input value={version} onChange={e => setVersion(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none" placeholder="1.0.0" />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-900">ОС</label>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {['Win', 'Mac', 'Linux', 'iOS', 'Android'].map(os => (
                   <button key={os} onClick={() => setSelectedOS(prev => prev.includes(os) ? prev.filter(o => o !== os) : [...prev, os])}
                     className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${selectedOS.includes(os) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-100'}`}>
@@ -554,7 +554,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
           {/* Audit Trail */}
           <div className="pt-6 border-t border-slate-50">
             <h2 className="text-xl font-black text-slate-900 mb-6">История жизненного цикла</h2>
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <div className="p-6 rounded-3xl border border-slate-100 bg-slate-50/50">
                 <p className="text-[10px] font-black text-slate-400 uppercase mb-2">СОЗДАН</p>
                 <p className="font-bold text-slate-900">
@@ -601,14 +601,14 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
         </div>
 
         {/* Футер с кнопками */}
-        <div className="mt-8 flex justify-end items-center gap-6">
+        <div className="mt-4 sm:mt-8 flex flex-wrap justify-end items-center gap-3 sm:gap-6">
           <button onClick={onClose} className="text-sm font-bold text-slate-500 uppercase">Отмена</button>
           {isCreator && assignedToId == null && (
             <button
               type="button"
               disabled={lifecyclePending || !assignedToEmailChoice}
               onClick={() => handleSave({ closeOnSuccess: false })}
-              className="bg-slate-900 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-slate-200 hover:scale-[1.02] transition-all disabled:opacity-60"
+              className="bg-slate-900 text-white px-6 sm:px-10 py-3 sm:py-4 rounded-3xl font-black shadow-lg shadow-slate-200 hover:scale-[1.02] transition-all disabled:opacity-60"
             >
               Закрепить
             </button>
@@ -618,7 +618,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
               type="button"
               disabled={lifecyclePending}
               onClick={handlePass}
-              className="bg-emerald-600 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-emerald-100 hover:scale-[1.02] transition-all disabled:opacity-60"
+              className="bg-emerald-600 text-white px-6 sm:px-10 py-3 sm:py-4 rounded-3xl font-black shadow-lg shadow-emerald-100 hover:scale-[1.02] transition-all disabled:opacity-60"
             >
               Сдать
             </button>
@@ -628,12 +628,12 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
               type="button"
               disabled={lifecyclePending}
               onClick={handleAccept}
-              className="bg-purple-600 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-purple-100 hover:scale-[1.02] transition-all disabled:opacity-60"
+              className="bg-purple-600 text-white px-6 sm:px-10 py-3 sm:py-4 rounded-3xl font-black shadow-lg shadow-purple-100 hover:scale-[1.02] transition-all disabled:opacity-60"
             >
               Принять
             </button>
           )}
-          <button onClick={() => handleSave()} className="bg-blue-600 text-white px-10 py-4 rounded-3xl font-black shadow-lg shadow-blue-100 hover:scale-[1.02] transition-all">
+          <button onClick={() => handleSave()} className="bg-blue-600 text-white px-6 sm:px-10 py-3 sm:py-4 rounded-3xl font-black shadow-lg shadow-blue-100 hover:scale-[1.02] transition-all">
             {isEditing ? 'Обновить баг' : 'Создать баг'}
           </button>
         </div>
