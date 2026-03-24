@@ -208,17 +208,8 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     if (isOpen && currentBug) {
       const baseUrl = (import.meta as any).env.VITE_API_URL;
       const id = currentBug.id ?? currentBug.id_pk;
-      const url = `${baseUrl}/bugs/${id}/photo`;
-      // Проверяем наличие фото через HEAD
-      fetch(url, { method: 'HEAD' }).then(res => {
-        if (res.ok) {
-          setPhoto(`${url}?t=${Date.now()}`);
-          setPhotoName('фото');
-        } else {
-          setPhoto(undefined);
-          setPhotoName('');
-        }
-      }).catch(() => { setPhoto(undefined); setPhotoName(''); });
+      setPhoto(`${baseUrl}/bugs/${id}/photo?t=${Date.now()}`);
+      setPhotoName('фото');
     } else {
       setPhoto(undefined);
       setPhotoName('');
@@ -544,6 +535,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
                   alt="скриншот"
                   className="w-full max-h-48 object-cover rounded-xl border border-slate-100 cursor-zoom-in"
                   onClick={() => setLightbox(true)}
+                  onError={() => { setPhoto(undefined); setPhotoName(''); }}
                 />
               </div>
             )}
