@@ -482,11 +482,11 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-900">Описание</label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-4 rounded-xl border-slate-100 bg-slate-50 min-h-[120px] outline-none" />
+              <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full p-4 rounded-xl border border-slate-300 bg-slate-50 min-h-[120px] outline-none" />
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-900">Шаги воспроизведения</label>
-              <textarea value={steps} onChange={e => setSteps(e.target.value)} className="w-full p-4 rounded-xl border-slate-100 bg-slate-50 min-h-[120px] outline-none" />
+              <textarea value={steps} onChange={e => setSteps(e.target.value)} className="w-full p-4 rounded-xl border border-slate-300 bg-slate-50 min-h-[120px] outline-none" />
             </div>
           </div>
 
@@ -497,7 +497,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
               <textarea 
                 value={expected} 
                 onChange={e => setExpected(e.target.value)} 
-                className="w-full p-4 rounded-xl border border-slate-100 bg-slate-50 min-h-[80px] outline-none" 
+                className="w-full p-4 rounded-xl border border-slate-300 bg-slate-50 min-h-[80px] outline-none" 
               />
             </div>
             <div className="space-y-2">
@@ -505,7 +505,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
               <textarea 
                 value={actual} 
                 onChange={e => setActual(e.target.value)} 
-                className="w-full p-4 rounded-xl border border-slate-100 bg-slate-50 min-h-[80px] outline-none" 
+                className="w-full p-4 rounded-xl border border-slate-300 bg-slate-50 min-h-[80px] outline-none" 
               />
             </div>
           </div>
