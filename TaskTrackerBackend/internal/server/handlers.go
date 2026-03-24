@@ -386,7 +386,6 @@ func HandleUploadBugPhoto(uploadsDir string) http.HandlerFunc {
 		}
 		defer file.Close()
 
-		// Удаляем старое фото для этого бага
 		old, _ := filepath.Glob(filepath.Join(uploadsDir, "bug_"+id+".*"))
 		for _, f := range old {
 			os.Remove(f)

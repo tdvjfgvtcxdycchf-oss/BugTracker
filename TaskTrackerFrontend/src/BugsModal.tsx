@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { API_URL } from './config';
 
 interface BugsModalProps {
   task: any;
   onClose: () => void;
   setIsEditorOpen: (open: boolean) => void;
   setSelectedBugId: (id: string | undefined) => void;
-  onBugsLoaded: (bugs: any[]) => void; // Добавили колбэк
+  onBugsLoaded: (bugs: any[]) => void;
 }
 
 export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedBugId, onBugsLoaded }: BugsModalProps) {
@@ -18,20 +19,18 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
     if (!task?.id) return;
     setLoading(true);
     try {
-      const baseUrl = (import.meta as any).env.VITE_API_URL;
-      const response = await fetch(`${baseUrl}/bugs/${task.id}`);
+      const response = await fetch(`${API_URL}/bugs/${task.id}`);
       const data = await response.json();
       const loadedBugs = data || [];
       setBugs(loadedBugs);
-      onBugsLoaded(loadedBugs); // Синхронизируем с Dashboard
+      onBugsLoaded(loadedBugs);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
 
   useEffect(() => {
     fetchBugs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [task?.id]);
+  }, [task?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDeleteBug = async (bugId: number) => {
     if (!bugId || !currentUserId) return;
@@ -39,8 +38,7 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
 
     setPendingDeleteBugId(bugId);
     try {
-      const baseUrl = (import.meta as any).env.VITE_API_URL;
-      const res = await fetch(`${baseUrl}/bugs/${bugId}`, {
+      const res = await fetch(`${API_URL}/bugs/${bugId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ created_by: currentUserId }),

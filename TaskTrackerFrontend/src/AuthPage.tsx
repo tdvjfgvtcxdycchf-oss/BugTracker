@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-
+import { API_URL } from './config';
 
 export default function AuthPage() {
-  const [isLogin, setIsLogin] = useState(true); // Переключатель Вход/Регистрация
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -16,45 +15,32 @@ export default function AuthPage() {
     setFormError(null);
     setPending(true);
 
-    const userData = { email, password };
-    const baseUrl = (import.meta as any).env.VITE_API_URL;
-  // Выбираем URL в зависимости от режима: вход или регистрация
-    const url = isLogin 
-    ? `${baseUrl}/login` // Замени на свой путь для логина
-    : `${baseUrl}/users`;
+    const url = isLogin ? `${API_URL}/login` : `${API_URL}/users`;
 
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(userData),
-    });
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      // Выводим ошибку из бэкенда (например, "invalid password" или "user already exists")
-      throw new Error(data.error || 'Ошибка при выполнении запроса');
-    }
+      if (!response.ok) {
+        throw new Error(data.error || 'Ошибка при выполнении запроса');
+      }
 
-    // Проверяем наличие ID (бэкенд теперь возвращает {"id": ...})
-    const userId = data.id || data.Id;
+      const userId = data.id || data.Id;
 
-    if (userId) {
-      // СОХРАНЯЕМ ДАННЫЕ
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('userId', userId.toString());
-      localStorage.setItem('userEmail', email);
-
-      // ПЕРЕХОДИМ НА ГЛАВНУЮ
-      navigate('/');
-      window.location.reload(); 
-    } else {
-      throw new Error("Сервер не вернул ID пользователя");
-    }
-
+      if (userId) {
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('userId', userId.toString());
+        localStorage.setItem('userEmail', email);
+        navigate('/');
+        window.location.reload();
+      } else {
+        throw new Error("Сервер не вернул ID пользователя");
+      }
     } catch (err: any) {
       setFormError(err.message);
       console.error('Auth error:', err);
@@ -72,7 +58,7 @@ export default function AuthPage() {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Или{' '}
-            <button 
+            <button
               onClick={() => setIsLogin(!isLogin)}
               className="font-medium text-blue-600 hover:text-blue-500 underline"
             >
@@ -80,7 +66,7 @@ export default function AuthPage() {
             </button>
           </p>
         </div>
-        
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm space-y-4">
             <div>

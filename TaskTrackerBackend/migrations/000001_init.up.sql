@@ -10,7 +10,7 @@ CREATE TABLE Task (
     title VARCHAR(255) NOT NULL,
     description TEXT,
     owner_id_fk INTEGER NOT NULL,
-    
+
     CONSTRAINT fk_task_owner FOREIGN KEY (owner_id_fk) REFERENCES "User"(id_pk) ON DELETE CASCADE
 );
 
@@ -24,23 +24,19 @@ CREATE TABLE Bug (
     status VARCHAR(50),
     version_product VARCHAR(50),
     description TEXT,
-    
-    -- Кто создал
+
     created_by_fk INTEGER NOT NULL,
     created_time DATE DEFAULT CURRENT_DATE,
 
-    -- За кем закреплён
     assigned_to_fk INTEGER,
     assigned_time DATE,
-    
-    -- Кто сдал
+
     passed_by_fk INTEGER,
     passed_time DATE,
-    
-    -- Кто принял 
+
     accepted_by_fk INTEGER,
     accepted_time DATE,
-    
+
     playback_description TEXT,
     expected_result TEXT,
     actual_result TEXT,

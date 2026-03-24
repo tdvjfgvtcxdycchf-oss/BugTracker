@@ -2,10 +2,8 @@
 
 .PHONY: build run stop down docker-build docker-up docker-down docker-logs
 
-
 runapp:
 	go run cmd/main.go
-
 
 docker-build:
 	docker compose -f docker/docker-compose.yaml build
@@ -27,10 +25,3 @@ docker-logs:
 
 docker-restart:
 	docker compose -f docker/docker-compose.yaml restart
-
-docker-delete-images:
-	docker rmi docker-subscriptions_service_app
-	docker rmi postgres:17
-
-delete-db:
-	docker volume rm docker_postgres_data

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from './config';
 import TaskModal from './TaskModal';
 import BugsModal from './BugsModal';
 import BugDetailEditor from './BugDetailEditor';
@@ -16,8 +17,7 @@ function Dashboard() {
     const fetchTasks = async () => {
         setIsLoading(true);
         try {
-            const baseUrl = (import.meta as any).env.VITE_API_URL;
-            const response = await fetch(`${baseUrl}/tasks`);
+            const response = await fetch(`${API_URL}/tasks`);
             const data = await response.json();
             setTasks(data || []);
         } catch (err) { console.error("Fetch tasks error:", err); }
@@ -30,8 +30,7 @@ function Dashboard() {
         if (!taskId || !currentUserId) return;
         if (!confirm('Удалить задачу?')) return;
         try {
-            const baseUrl = (import.meta as any).env.VITE_API_URL;
-            const res = await fetch(`${baseUrl}/tasks/${taskId}`, {
+            const res = await fetch(`${API_URL}/tasks/${taskId}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ owner_id: currentUserId }),
@@ -57,9 +56,8 @@ function Dashboard() {
     const handleCreateTask = async (data: { name: string; desc: string }) => {
         try {
             const userId = localStorage.getItem('userId');
-            const baseUrl = (import.meta as any).env.VITE_API_URL;
             if (!userId) return alert("Ошибка: Авторизуйтесь снова");
-            const response = await fetch(`${baseUrl}/tasks`, {
+            const response = await fetch(`${API_URL}/tasks`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ title: data.name, description: data.desc, owner_id: Number(userId) }),
