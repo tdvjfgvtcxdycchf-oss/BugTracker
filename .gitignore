@@ -1,3 +1,16 @@
+# Секреты
 .env
-.mod
-.sum
+.env.*
+!.env.example
+
+# Go
+*.mod
+*.sum
+
+# Node
+node_modules/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
