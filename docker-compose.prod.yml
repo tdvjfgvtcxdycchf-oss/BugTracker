@@ -1,0 +1,35 @@
+services:
+  postgres_db:
+    image: postgres:17
+    env_file:
+      - ./TaskTrackerBackend/docker/.env
+    volumes:
+      - ./TaskTrackerBackend/migrations/000001_init.up.sql:/docker-entrypoint-initdb.d/000001_init.up.sql
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - bug_tracker_network
+    restart: unless-stopped
+
+  app:
+    build:
+      context: ./TaskTrackerBackend
+      dockerfile: docker/dockerfile
+    ports:
+      - "8081:8081"
+    env_file:
+      - ./TaskTrackerBackend/docker/.env
+    depends_on:
+      - postgres_db
+    volumes:
+      - uploads_data:/root/uploads
+    networks:
+      - bug_tracker_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  bug_tracker_network:
+    driver: bridge
