@@ -65,16 +65,14 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const [photo, setPhoto] = useState<string | undefined>();
   const [photoName, setPhotoName] = useState('');
   const [lightbox, setLightbox] = useState(false);
-
-  const getBugPhotoKey = () => `bug_photo_${getBugId()}`;
+  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setPhotoName(file.name);
-    const reader = new FileReader();
-    reader.onload = () => setPhoto(reader.result as string);
-    reader.readAsDataURL(file);
+    setPendingPhotoFile(file);
+    setPhoto(URL.createObjectURL(file));
   };
 
   const [severity, setSeverity] = useState('Low');
@@ -204,14 +202,27 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     };
   }, [isOpen, currentBug, currentUserId]);
 
-  // Загружаем фото из localStorage при открытии бага
+  // Загружаем фото с сервера при открытии бага
   useEffect(() => {
+    setPendingPhotoFile(null);
     if (isOpen && currentBug) {
-      const saved = localStorage.getItem(`bug_photo_${currentBug.id ?? currentBug.id_pk}`);
-      if (saved) setPhoto(saved);
-      else { setPhoto(undefined); setPhotoName(''); }
+      const baseUrl = (import.meta as any).env.VITE_API_URL;
+      const id = currentBug.id ?? currentBug.id_pk;
+      const url = `${baseUrl}/bugs/${id}/photo`;
+      // Проверяем наличие фото через HEAD
+      fetch(url, { method: 'HEAD' }).then(res => {
+        if (res.ok) {
+          setPhoto(`${url}?t=${Date.now()}`);
+          setPhotoName('фото');
+        } else {
+          setPhoto(undefined);
+          setPhotoName('');
+        }
+      }).catch(() => { setPhoto(undefined); setPhotoName(''); });
+    } else {
+      setPhoto(undefined);
+      setPhotoName('');
     }
-    if (isOpen && !currentBug) { setPhoto(undefined); setPhotoName(''); }
   }, [isOpen, currentBug]);
 
   // Заполнение полей данными
@@ -298,12 +309,17 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
       if (res.ok) {
         await refreshBugs();
-        if (photo) {
-          // Для нового бага ID придёт из обновлённого списка — берём максимальный
+        if (pendingPhotoFile) {
+          // Для нового бага берём максимальный ID из обновлённого списка
           const bugsRes = await fetch(`${baseUrl}/bugs/${task.id}`);
           const bugs = await bugsRes.json().catch(() => []);
           const targetId = isEditing ? getBugId() : Math.max(...bugs.map((b: any) => b.id));
-          if (targetId) localStorage.setItem(`bug_photo_${targetId}`, photo);
+          if (targetId) {
+            const form = new FormData();
+            form.append('photo', pendingPhotoFile);
+            await fetch(`${baseUrl}/bugs/${targetId}/photo`, { method: 'POST', body: form });
+            setPendingPhotoFile(null);
+          }
         }
         if (opts?.closeOnSuccess !== false) onClose();
       }

@@ -4,8 +4,11 @@ import (
 	"bug_tracker/internal/service"
 	"bug_tracker/internal/sql"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -363,5 +366,68 @@ func HandleDeleteBug(svc *service.TaskTrackerService) http.HandlerFunc {
 
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+	}
+}
+
+func HandleUploadBugPhoto(uploadsDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		id := vars["id"]
+
+		if err := r.ParseMultipartForm(10 << 20); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "file too large")
+			return
+		}
+
+		file, header, err := r.FormFile("photo")
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "no photo provided")
+			return
+		}
+		defer file.Close()
+
+		// Удаляем старое фото для этого бага
+		old, _ := filepath.Glob(filepath.Join(uploadsDir, "bug_"+id+".*"))
+		for _, f := range old {
+			os.Remove(f)
+		}
+
+		ext := filepath.Ext(header.Filename)
+		if ext == "" {
+			ext = ".jpg"
+		}
+
+		dstPath := filepath.Join(uploadsDir, "bug_"+id+ext)
+		dst, err := os.Create(dstPath)
+		if err != nil {
+			slog.Error("failed to create photo file", "error", err)
+			writeJSONError(w, http.StatusInternalServerError, "failed to save file")
+			return
+		}
+		defer dst.Close()
+
+		if _, err := io.Copy(dst, file); err != nil {
+			slog.Error("failed to write photo file", "error", err)
+			writeJSONError(w, http.StatusInternalServerError, "failed to save file")
+			return
+		}
+
+		slog.Info("bug photo uploaded", "bug_id", id)
+		w.WriteHeader(http.StatusCreated)
+	}
+}
+
+func HandleGetBugPhoto(uploadsDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		id := vars["id"]
+
+		matches, err := filepath.Glob(filepath.Join(uploadsDir, "bug_"+id+".*"))
+		if err != nil || len(matches) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+
+		http.ServeFile(w, r, matches[0])
 	}
 }

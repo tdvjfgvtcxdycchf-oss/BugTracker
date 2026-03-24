@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -39,6 +40,11 @@ func (w *responseWriter) WriteHeader(code int) {
 func NewRouter(ctx context.Context, conn *pgxpool.Pool) http.Handler {
 	svc := service.NewTaskTrackerService(conn)
 
+	uploadsDir := "./uploads"
+	if err := os.MkdirAll(uploadsDir, 0755); err != nil {
+		slog.Error("failed to create uploads dir", "error", err)
+	}
+
 	router := mux.NewRouter()
 	router.Use(loggingMiddleware)
 
@@ -52,5 +58,7 @@ func NewRouter(ctx context.Context, conn *pgxpool.Pool) http.Handler {
 	router.Path("/bugs/{id}").Methods("GET").HandlerFunc(HandleFuncGetAllBugs(svc))
 	router.Path("/bugs/{id}").Methods("PATCH").HandlerFunc(HandleUpdateBug(svc))
 	router.Path("/bugs/{id}").Methods("DELETE").HandlerFunc(HandleDeleteBug(svc))
+	router.Path("/bugs/{id}/photo").Methods("POST").HandlerFunc(HandleUploadBugPhoto(uploadsDir))
+	router.Path("/bugs/{id}/photo").Methods("GET").HandlerFunc(HandleGetBugPhoto(uploadsDir))
 	return router
 }
