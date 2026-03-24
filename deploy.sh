@@ -2,7 +2,7 @@
 set -e
 
 DOMAIN="bugtracker.sytes.net"
-APP_DIR="/opt/bugtracker"
+APP_DIR="/home/zolbrain/BugTracker"
 WWW_DIR="/var/www/bugtracker"
 
 echo "=== Pulling latest code ==="
