@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bug_tracker/internal/auth"
 	"bug_tracker/internal/service"
 	"bug_tracker/internal/sql"
 	"encoding/json"
@@ -8,9 +9,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 )
@@ -48,7 +49,7 @@ func HandleCreateUser(svc *service.TaskTrackerService) http.HandlerFunc {
 			return
 		}
 
-		createdUserId, err := svc.Register(r.Context(), user)
+		createdUserId, role, err := svc.Register(r.Context(), user)
 		if err != nil {
 			if err.Error() == "user already exists" {
 				w.WriteHeader(http.StatusConflict)
@@ -59,8 +60,18 @@ func HandleCreateUser(svc *service.TaskTrackerService) http.HandlerFunc {
 			return
 		}
 
+		jwtSecret := os.Getenv("JWT_SECRET")
+		if jwtSecret == "" {
+			writeJSONError(w, http.StatusInternalServerError, "JWT_SECRET is not set")
+			return
+		}
+		token, tokenErr := auth.GenerateJWT(jwtSecret, createdUserId, user.Email, 24*time.Hour)
+		if tokenErr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to generate jwt")
+			return
+		}
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]int{"id": createdUserId})
+		json.NewEncoder(w).Encode(map[string]any{"id": createdUserId, "token": token, "role": role})
 	}
 }
 
@@ -90,7 +101,7 @@ func HandleGetIdUser(svc *service.TaskTrackerService) http.HandlerFunc {
 			return
 		}
 
-		loginedUserId, err := svc.Login(r.Context(), user)
+		loginedUserId, role, err := svc.Login(r.Context(), user)
 		if err != nil {
 			if err.Error() == "user not exist" {
 				w.WriteHeader(http.StatusUnauthorized)
@@ -101,8 +112,18 @@ func HandleGetIdUser(svc *service.TaskTrackerService) http.HandlerFunc {
 			return
 		}
 
+		jwtSecret := os.Getenv("JWT_SECRET")
+		if jwtSecret == "" {
+			writeJSONError(w, http.StatusInternalServerError, "JWT_SECRET is not set")
+			return
+		}
+		token, tokenErr := auth.GenerateJWT(jwtSecret, loginedUserId, user.Email, 24*time.Hour)
+		if tokenErr != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to generate jwt")
+			return
+		}
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]int{"id": loginedUserId})
+		json.NewEncoder(w).Encode(map[string]any{"id": loginedUserId, "token": token, "role": role})
 	}
 }
 
@@ -369,64 +390,365 @@ func HandleDeleteBug(svc *service.TaskTrackerService) http.HandlerFunc {
 	}
 }
 
-func HandleUploadBugPhoto(uploadsDir string) http.HandlerFunc {
+func HandleUploadBugPhoto(svc *service.TaskTrackerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
-		id := vars["id"]
+		idStr := vars["id"]
+		id, err := strconv.Atoi(idStr)
+		if err != nil || id <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid bug id")
+			return
+		}
 
 		if err := r.ParseMultipartForm(10 << 20); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "file too large")
 			return
 		}
 
-		file, header, err := r.FormFile("photo")
+		file, _, err := r.FormFile("photo")
 		if err != nil {
 			writeJSONError(w, http.StatusBadRequest, "no photo provided")
 			return
 		}
 		defer file.Close()
 
-		old, _ := filepath.Glob(filepath.Join(uploadsDir, "bug_"+id+".*"))
-		for _, f := range old {
-			os.Remove(f)
-		}
-
-		ext := filepath.Ext(header.Filename)
-		if ext == "" {
-			ext = ".jpg"
-		}
-
-		dstPath := filepath.Join(uploadsDir, "bug_"+id+ext)
-		dst, err := os.Create(dstPath)
+		data, err := io.ReadAll(file)
 		if err != nil {
-			slog.Error("failed to create photo file", "error", err)
-			writeJSONError(w, http.StatusInternalServerError, "failed to save file")
-			return
-		}
-		defer dst.Close()
-
-		if _, err := io.Copy(dst, file); err != nil {
-			slog.Error("failed to write photo file", "error", err)
-			writeJSONError(w, http.StatusInternalServerError, "failed to save file")
+			slog.Error("failed to read photo file", "error", err)
+			writeJSONError(w, http.StatusInternalServerError, "failed to read file")
 			return
 		}
 
-		slog.Info("bug photo uploaded", "bug_id", id)
+		if err := svc.SaveBugPhoto(r.Context(), id, data); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to save photo")
+			return
+		}
+
+		slog.Info("bug photo saved to db", "bug_id", id)
 		w.WriteHeader(http.StatusCreated)
 	}
 }
 
-func HandleGetBugPhoto(uploadsDir string) http.HandlerFunc {
+// ── Comments ─────────────────────────────────────────────────────────────────
+
+func HandleAddComment(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vars := mux.Vars(r)
+		bugID, err := strconv.Atoi(vars["id"])
+		if err != nil || bugID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid bug id")
+			return
+		}
+		userID, ok := GetUserIDFromContext(r.Context())
+		if !ok {
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		var body struct {
+			Body string `json:"body"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Body == "" {
+			writeJSONError(w, http.StatusBadRequest, "body is required")
+			return
+		}
+		comment, err := svc.AddBugComment(r.Context(), bugID, userID, body.Body)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to add comment")
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(comment)
+	}
+}
+
+func HandleGetComments(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vars := mux.Vars(r)
+		bugID, err := strconv.Atoi(vars["id"])
+		if err != nil || bugID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid bug id")
+			return
+		}
+		comments, err := svc.GetBugComments(r.Context(), bugID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to fetch comments")
+			return
+		}
+		if comments == nil {
+			w.Write([]byte("[]"))
+			return
+		}
+		json.NewEncoder(w).Encode(comments)
+	}
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────────────
+
+func HandleGetAuditLog(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vars := mux.Vars(r)
+		bugID, err := strconv.Atoi(vars["id"])
+		if err != nil || bugID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid bug id")
+			return
+		}
+		log, err := svc.GetAuditLog(r.Context(), bugID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to fetch audit log")
+			return
+		}
+		if log == nil {
+			w.Write([]byte("[]"))
+			return
+		}
+		json.NewEncoder(w).Encode(log)
+	}
+}
+
+// ── Relations ────────────────────────────────────────────────────────────────
+
+func HandleAddRelation(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vars := mux.Vars(r)
+		bugID, err := strconv.Atoi(vars["id"])
+		if err != nil || bugID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid bug id")
+			return
+		}
+		var body struct {
+			ToBugId      int    `json:"to_bug_id"`
+			RelationType string `json:"relation_type"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if body.ToBugId <= 0 || body.RelationType == "" {
+			writeJSONError(w, http.StatusBadRequest, "to_bug_id and relation_type are required")
+			return
+		}
+		if err := svc.AddBugRelation(r.Context(), bugID, body.ToBugId, body.RelationType); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to add relation")
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	}
+}
+
+func HandleGetRelations(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vars := mux.Vars(r)
+		bugID, err := strconv.Atoi(vars["id"])
+		if err != nil || bugID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid bug id")
+			return
+		}
+		relations, err := svc.GetBugRelations(r.Context(), bugID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to fetch relations")
+			return
+		}
+		if relations == nil {
+			w.Write([]byte("[]"))
+			return
+		}
+		json.NewEncoder(w).Encode(relations)
+	}
+}
+
+func HandleDeleteRelation(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vars := mux.Vars(r)
+		relID, err := strconv.Atoi(vars["relId"])
+		if err != nil || relID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid relation id")
+			return
+		}
+		if err := svc.DeleteBugRelation(r.Context(), relID); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to delete relation")
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+	}
+}
+
+// ── Tags ─────────────────────────────────────────────────────────────────────
+
+func HandleSetTags(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vars := mux.Vars(r)
+		bugID, err := strconv.Atoi(vars["id"])
+		if err != nil || bugID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid bug id")
+			return
+		}
+		var body struct {
+			Tags []string `json:"tags"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if err := svc.SetBugTags(r.Context(), bugID, body.Tags); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to set tags")
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+	}
+}
+
+func HandleGetTags(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vars := mux.Vars(r)
+		bugID, err := strconv.Atoi(vars["id"])
+		if err != nil || bugID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid bug id")
+			return
+		}
+		tags, err := svc.GetBugTags(r.Context(), bugID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to get tags")
+			return
+		}
+		if tags == nil {
+			tags = []string{}
+		}
+		json.NewEncoder(w).Encode(tags)
+	}
+}
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+
+func HandleGetTemplates(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		templates, err := svc.GetTemplates(r.Context())
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to fetch templates")
+			return
+		}
+		if templates == nil {
+			w.Write([]byte("[]"))
+			return
+		}
+		json.NewEncoder(w).Encode(templates)
+	}
+}
+
+func HandleCreateTemplate(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		userID, ok := GetUserIDFromContext(r.Context())
+		if !ok {
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		var tmpl sql.BugTemplate
+		if err := json.NewDecoder(r.Body).Decode(&tmpl); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid body")
+			return
+		}
+		if tmpl.Name == "" {
+			writeJSONError(w, http.StatusBadRequest, "name is required")
+			return
+		}
+		tmpl.CreatedBy = userID
+		id, err := svc.CreateTemplate(r.Context(), tmpl)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to create template")
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]int{"id": id})
+	}
+}
+
+func HandleDeleteTemplate(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vars := mux.Vars(r)
+		tmplID, err := strconv.Atoi(vars["id"])
+		if err != nil || tmplID <= 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid template id")
+			return
+		}
+		userID, ok := GetUserIDFromContext(r.Context())
+		if !ok {
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		deleted, err := svc.DeleteTemplate(r.Context(), tmplID, userID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to delete template")
+			return
+		}
+		if !deleted {
+			writeJSONError(w, http.StatusForbidden, "not found or not allowed")
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]bool{"deleted": true})
+	}
+}
+
+// ── Analytics ─────────────────────────────────────────────────────────────────
+
+func HandleGetStats(svc *service.TaskTrackerService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		vars := mux.Vars(r)
+		taskIDStr := vars["id"]
+
+		if taskIDStr != "" {
+			taskID, err := strconv.Atoi(taskIDStr)
+			if err != nil || taskID <= 0 {
+				writeJSONError(w, http.StatusBadRequest, "invalid task id")
+				return
+			}
+			stats, err := svc.GetBugStatsByTask(r.Context(), taskID)
+			if err != nil {
+				writeJSONError(w, http.StatusInternalServerError, "failed to get stats")
+				return
+			}
+			json.NewEncoder(w).Encode(stats)
+			return
+		}
+
+		stats, err := svc.GetAllBugStats(r.Context())
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to get stats")
+			return
+		}
+		json.NewEncoder(w).Encode(stats)
+	}
+}
+
+func HandleGetBugPhoto(svc *service.TaskTrackerService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
-		id := vars["id"]
-
-		matches, err := filepath.Glob(filepath.Join(uploadsDir, "bug_"+id+".*"))
-		if err != nil || len(matches) == 0 {
+		idStr := vars["id"]
+		id, err := strconv.Atoi(idStr)
+		if err != nil || id <= 0 {
 			http.NotFound(w, r)
 			return
 		}
 
-		http.ServeFile(w, r, matches[0])
+		data, err := svc.GetBugPhoto(r.Context(), id)
+		if err != nil || len(data) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+
+		w.Header().Set("Content-Type", http.DetectContentType(data))
+		w.WriteHeader(http.StatusOK)
+		w.Write(data)
 	}
 }

@@ -6,6 +6,7 @@ import BugsModal from './BugsModal';
 import BugDetailEditor from './BugDetailEditor';
 
 function Dashboard() {
+    const navigate = useNavigate();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [selectedTask, setSelectedTask] = useState<any>(null);
@@ -13,11 +14,15 @@ function Dashboard() {
     const [tasks, setTasks] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const currentUserId = Number(localStorage.getItem('userId') || '0');
+    const jwtToken = localStorage.getItem('jwtToken') || '';
+    const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
 
     const fetchTasks = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`${API_URL}/tasks`);
+            const response = await fetch(`${API_URL}/tasks`, {
+                headers: authHeaders,
+            });
             const data = await response.json();
             setTasks(data || []);
         } catch (err) { console.error("Fetch tasks error:", err); }
@@ -32,7 +37,7 @@ function Dashboard() {
         try {
             const res = await fetch(`${API_URL}/tasks/${taskId}`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
                 body: JSON.stringify({ owner_id: currentUserId }),
             });
             if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
@@ -59,7 +64,7 @@ function Dashboard() {
             if (!userId) return alert("Ошибка: Авторизуйтесь снова");
             const response = await fetch(`${API_URL}/tasks`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...authHeaders },
                 body: JSON.stringify({ title: data.name, description: data.desc, owner_id: Number(userId) }),
             });
             if (!response.ok) throw new Error('Не удалось создать задачу');
@@ -71,6 +76,9 @@ function Dashboard() {
     const colors = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
     const getColor = (id: number) => colors[id % colors.length];
 
+    const userRole = localStorage.getItem('userRole') || 'qa';
+    const canViewAnalytics = userRole === 'pm' || userRole === 'admin';
+
     return (
         <div className="p-4 sm:p-8 w-full max-w-4xl mx-auto">
             <div className="flex justify-between items-center mb-8">
@@ -78,12 +86,22 @@ function Dashboard() {
                     <h1 className="text-2xl font-bold text-gray-900">Задачи</h1>
                     <p className="text-sm text-gray-400 mt-0.5">{tasks.length} активных задач</p>
                 </div>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all text-sm"
-                >
-                    <span className="text-lg leading-none">+</span> Создать задачу
-                </button>
+                <div className="flex items-center gap-3">
+                    {canViewAnalytics && (
+                        <button
+                            onClick={() => navigate('/analytics')}
+                            className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all text-sm"
+                        >
+                            Аналитика
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all text-sm"
+                    >
+                        <span className="text-lg leading-none">+</span> Создать задачу
+                    </button>
+                </div>
             </div>
 
             {isLoading ? (

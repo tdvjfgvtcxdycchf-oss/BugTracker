@@ -4,13 +4,15 @@
 !.env.example
 
 # Go
-*.mod
-*.sum
+# (go.mod / go.sum должны коммититься)
 
 # Node
 node_modules/
 dist/
 .vite/
+
+# Local scratch
+temp_folder/
 
 # OS
 .DS_Store

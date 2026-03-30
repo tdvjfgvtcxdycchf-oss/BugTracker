@@ -60,7 +60,25 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const [users, setUsers] = useState<User[]>([]);
   const currentUserEmail = localStorage.getItem('userEmail') || 'Guest';
   const currentUserId = Number(localStorage.getItem('userId') || '0');
+  const currentUserRole = localStorage.getItem('userRole') || 'qa';
+  const jwtToken = localStorage.getItem('jwtToken') || '';
+  const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
   const [lifecyclePending, setLifecyclePending] = useState(false);
+
+  // Comments
+  const [comments, setComments] = useState<{ id_pk: number; user_id_fk: number; body: string; created_at: string }[]>([]);
+  const [commentBody, setCommentBody] = useState('');
+  const [commentPending, setCommentPending] = useState(false);
+
+  // Audit log
+  const [auditLog, setAuditLog] = useState<{ id_pk: number; user_id_fk: number; field: string; old_value: string; new_value: string; changed_at: string }[]>([]);
+
+  // Relations
+  const [relations, setRelations] = useState<{ id_pk: number; from_bug_id_fk: number; to_bug_id_fk: number; relation_type: string }[]>([]);
+  const [newRelBugId, setNewRelBugId] = useState('');
+  const [newRelType, setNewRelType] = useState('related');
+  const [relPending, setRelPending] = useState(false);
+
   const [photo, setPhoto] = useState<string | undefined>();
   const [photoName, setPhotoName] = useState('');
   const [lightbox, setLightbox] = useState(false);
@@ -70,6 +88,16 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     const file = e.target.files?.[0];
     if (!file) return;
     setPhotoName(file.name);
+    setPendingPhotoFile(file);
+    setPhoto(URL.createObjectURL(file));
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const item = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image/'));
+    if (!item) return;
+    const file = item.getAsFile();
+    if (!file) return;
+    setPhotoName('скриншот.png');
     setPendingPhotoFile(file);
     setPhoto(URL.createObjectURL(file));
   };
@@ -116,7 +144,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
       try {
         const results = await Promise.all(
           ids.map(async (id) => {
-            const res = await fetch(`${API_URL}/users/${id}`);
+            const res = await fetch(`${API_URL}/users/${id}`, { headers: authHeaders });
             const emails = (await res.json()) as string[];
             return { id, emails };
           })
@@ -159,7 +187,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/users/${creatorId}`);
+        const res = await fetch(`${API_URL}/users/${creatorId}`, { headers: authHeaders });
         const emails = (await res.json()) as string[];
         if (!cancelled) {
           setAssignableEmails(Array.isArray(emails) ? emails : []);
@@ -201,6 +229,80 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     }
   }, [currentBug, isOpen]);
 
+  useEffect(() => {
+    if (!isOpen || !currentBug) { setComments([]); setAuditLog([]); setRelations([]); return; }
+    const id = currentBug.id ?? currentBug.id_pk;
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [cRes, aRes, rRes] = await Promise.all([
+          fetch(`${API_URL}/bugs/${id}/comments`, { headers: authHeaders }),
+          fetch(`${API_URL}/bugs/${id}/audit`, { headers: authHeaders }),
+          fetch(`${API_URL}/bugs/${id}/relations`, { headers: authHeaders }),
+        ]);
+        const cData = await cRes.json().catch(() => []);
+        const aData = await aRes.json().catch(() => []);
+        const rData = await rRes.json().catch(() => []);
+        if (!cancelled) {
+          setComments(Array.isArray(cData) ? cData : []);
+          setAuditLog(Array.isArray(aData) ? aData : []);
+          setRelations(Array.isArray(rData) ? rData : []);
+        }
+      } catch (err) { console.error(err); }
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, currentBug]);
+
+  const handleAddRelation = async () => {
+    const toId = parseInt(newRelBugId, 10);
+    if (!toId) return;
+    const id = currentBug?.id ?? currentBug?.id_pk;
+    if (!id) return;
+    setRelPending(true);
+    try {
+      const res = await fetch(`${API_URL}/bugs/${id}/relations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ to_bug_id: toId, relation_type: newRelType }),
+      });
+      if (res.ok) {
+        const newRel = await res.json();
+        setRelations(prev => [...prev, newRel]);
+        setNewRelBugId('');
+      }
+    } catch (err) { console.error(err); }
+    finally { setRelPending(false); }
+  };
+
+  const handleDeleteRelation = async (relId: number) => {
+    try {
+      const res = await fetch(`${API_URL}/relations/${relId}`, { method: 'DELETE', headers: authHeaders });
+      if (res.ok) setRelations(prev => prev.filter(r => r.id_pk !== relId));
+    } catch (err) { console.error(err); }
+  };
+
+  const handleAddComment = async () => {
+    const trimmed = commentBody.trim();
+    if (!trimmed) return;
+    const id = currentBug?.id ?? currentBug?.id_pk;
+    if (!id) return;
+    setCommentPending(true);
+    try {
+      const res = await fetch(`${API_URL}/bugs/${id}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ body: trimmed }),
+      });
+      if (res.ok) {
+        const newComment = await res.json();
+        setComments(prev => [...prev, newComment]);
+        setCommentBody('');
+      }
+    } catch (err) { console.error(err); }
+    finally { setCommentPending(false); }
+  };
+
   const getUserEmail = (id?: number) => {
     if (!id) return '—';
     const found = users.find(u => u.id_pk === id || u.id === id);
@@ -226,7 +328,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   };
 
   const refreshBugs = async () => {
-    const res = await fetch(`${API_URL}/bugs/${task.id}`);
+    const res = await fetch(`${API_URL}/bugs/${task.id}`, { headers: authHeaders });
     const updatedBugs = await res.json().catch(() => []);
     onBugSaved(updatedBugs);
   };
@@ -261,26 +363,56 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
       const res = await fetch(url, {
         method: isEditing ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(payload),
       });
 
       if (res.ok) {
         await refreshBugs();
         if (pendingPhotoFile) {
-          const bugsRes = await fetch(`${API_URL}/bugs/${task.id}`);
+          const bugsRes = await fetch(`${API_URL}/bugs/${task.id}`, { headers: authHeaders });
           const bugs = await bugsRes.json().catch(() => []);
           const targetId = isEditing ? getBugId() : Math.max(...bugs.map((b: any) => b.id));
           if (targetId) {
             const form = new FormData();
             form.append('photo', pendingPhotoFile);
-            await fetch(`${API_URL}/bugs/${targetId}/photo`, { method: 'POST', body: form });
+            await fetch(`${API_URL}/bugs/${targetId}/photo`, { method: 'POST', headers: authHeaders, body: form });
             setPendingPhotoFile(null);
           }
         }
         if (opts?.closeOnSuccess !== false) onClose();
       }
     } catch (err) { console.error(err); }
+  };
+
+  const handleStatusChange = async (newStatus: string) => {
+    const bugPk = getBugId();
+    if (!bugPk) return;
+    setLifecyclePending(true);
+    try {
+      const payload: any = {
+        task_id: task.id,
+        severity, priority, status: newStatus, description,
+        playback_description: steps,
+        expected_result: expected,
+        actual_result: actual,
+        version_product: version,
+        os: selectedOS.join(', '),
+        assigned_to: getAssignedToId() ?? null,
+        assigned_time: assignedTime ?? null,
+        passed_by: getPassedById() ?? null,
+        passed_time: passedTime ?? null,
+        accepted_by: getAcceptedById() ?? null,
+        accepted_time: acceptedTime ?? null,
+      };
+      const res = await fetch(`${API_URL}/bugs/${bugPk}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) { setStatus(newStatus); await refreshBugs(); }
+    } catch (err) { console.error(err); }
+    finally { setLifecyclePending(false); }
   };
 
   const handleLifecycle = async (type: 'pass' | 'accept') => {
@@ -308,7 +440,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
       const res = await fetch(`${API_URL}/bugs/${bugPk}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(payload),
       });
 
@@ -330,6 +462,13 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const canPass = isAssignee && passedById == null;
   const canAccept = isCreator && passedById != null && acceptedById == null;
 
+  // Role-based workflow
+  const isQA = currentUserRole === 'qa' || currentUserRole === 'admin';
+  const isDev = currentUserRole === 'developer' || currentUserRole === 'admin';
+  const canReopen = isEditing && isQA && (status === 'Fixed' || status === 'Ready for Retest' || status === 'Verified');
+  const canReject = isEditing && isDev && status !== 'Rejected' && status !== 'Can\'t Reproduce' && status !== 'Verified';
+  const canMarkFixed = isEditing && isDev && (status === 'Open' || status === 'In Progress' || status === 'Reopened');
+
   if (!isOpen) return null;
 
   return (
@@ -345,19 +484,32 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-900">Серьёзность</label>
               <select value={severity} onChange={e => setSeverity(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none">
-                <option value="Low">Низкий</option><option value="Medium">Средний</option><option value="High">Высокий</option>
+                <option value="Blocker">Blocker</option>
+                <option value="Critical">Critical</option>
+                <option value="Major">Major</option>
+                <option value="Minor">Minor</option>
               </select>
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-900">Приоритет</label>
               <select value={priority} onChange={e => setPriority(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none">
-                <option value="Low">Низкий</option><option value="Medium">Средний</option><option value="High">Высокий</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
               </select>
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-900">Статус</label>
               <select value={status} onChange={e => setStatus(e.target.value)} className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none">
-                <option value="Open">Открыт</option><option value="In Progress">В работе</option><option value="Closed">Закрыт</option>
+                <option value="New">New</option>
+                <option value="Open">Open</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Fixed">Fixed</option>
+                <option value="Ready for Retest">Ready for Retest</option>
+                <option value="Verified">Verified</option>
+                <option value="Reopened">Reopened</option>
+                <option value="Rejected">Rejected</option>
+                <option value="Can't Reproduce">Can't Reproduce</option>
               </select>
             </div>
           </div>
@@ -422,11 +574,11 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2" onPaste={handlePaste}>
             <label className="text-xs font-bold text-slate-900">Фото</label>
             <label className="flex items-center gap-3 cursor-pointer w-full p-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 hover:border-blue-400 transition-colors">
               <span className="text-lg">📎</span>
-              <span className="text-sm text-slate-500 truncate">{photoName || 'Прикрепить изображение...'}</span>
+              <span className="text-sm text-slate-500 truncate">{photoName || 'Прикрепить или вставить (Ctrl+V)...'}</span>
               <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
             </label>
             {photo && (
@@ -476,6 +628,100 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
               />
             </div>
           </div>
+
+          {isEditing && auditLog.length > 0 && (
+            <div className="pt-6 border-t border-slate-50">
+              <h2 className="text-xl font-black text-slate-900 mb-4">Лог изменений</h2>
+              <div className="space-y-2">
+                {auditLog.map(entry => (
+                  <div key={entry.id_pk} className="flex flex-wrap items-center gap-2 text-sm p-3 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="font-bold text-slate-700">{entry.field}</span>
+                    <span className="text-slate-400">·</span>
+                    <span className="line-through text-slate-400">{entry.old_value || '—'}</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="font-semibold text-slate-800">{entry.new_value || '—'}</span>
+                    <span className="ml-auto text-[10px] text-slate-400">{new Date(entry.changed_at).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {isEditing && (
+            <div className="pt-6 border-t border-slate-50">
+              <h2 className="text-xl font-black text-slate-900 mb-4">Связанные тикеты</h2>
+              <div className="space-y-2 mb-4">
+                {relations.length === 0 && <p className="text-sm text-slate-400">Нет связей</p>}
+                {relations.map(r => {
+                  const bugId = currentBug?.id ?? currentBug?.id_pk;
+                  const otherId = r.from_bug_id_fk === bugId ? r.to_bug_id_fk : r.from_bug_id_fk;
+                  const typeLabel = r.relation_type === 'duplicate' ? 'Дубликат' : r.relation_type === 'blocks' ? 'Блокирует' : 'Связан';
+                  return (
+                    <div key={r.id_pk} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                      <span className="text-xs font-bold text-slate-500 w-24 shrink-0">{typeLabel}</span>
+                      <span className="text-sm font-semibold text-slate-800">Баг #{otherId}</span>
+                      <button type="button" onClick={() => handleDeleteRelation(r.id_pk)} className="ml-auto text-slate-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <select value={newRelType} onChange={e => setNewRelType(e.target.value)} className="p-2 rounded-xl border border-slate-200 bg-white text-sm outline-none">
+                  <option value="related">Связан</option>
+                  <option value="duplicate">Дубликат</option>
+                  <option value="blocks">Блокирует</option>
+                </select>
+                <input
+                  type="number"
+                  placeholder="ID бага"
+                  value={newRelBugId}
+                  onChange={e => setNewRelBugId(e.target.value)}
+                  className="flex-1 min-w-[120px] p-2 rounded-xl border border-slate-200 bg-white text-sm outline-none"
+                />
+                <button type="button" disabled={relPending || !newRelBugId} onClick={handleAddRelation}
+                  className="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-700 disabled:opacity-50 transition-colors">
+                  Добавить
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isEditing && (
+            <div className="pt-6 border-t border-slate-50">
+              <h2 className="text-xl font-black text-slate-900 mb-4">Комментарии</h2>
+              <div className="space-y-3 mb-4">
+                {comments.length === 0 && (
+                  <p className="text-sm text-slate-400">Нет комментариев</p>
+                )}
+                {comments.map(c => (
+                  <div key={c.id_pk} className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-bold text-slate-500">{getUserEmail(c.user_id_fk)}</span>
+                      <span className="ml-auto text-[10px] text-slate-400">{new Date(c.created_at).toLocaleString()}</span>
+                    </div>
+                    <p className="text-sm text-slate-800 whitespace-pre-wrap">{c.body}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-3">
+                <textarea
+                  value={commentBody}
+                  onChange={e => setCommentBody(e.target.value)}
+                  placeholder="Написать комментарий..."
+                  className="flex-1 p-3 rounded-xl border border-slate-200 bg-white text-sm outline-none resize-none min-h-[60px]"
+                  onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAddComment(); }}
+                />
+                <button
+                  type="button"
+                  disabled={commentPending || !commentBody.trim()}
+                  onClick={handleAddComment}
+                  className="self-end bg-blue-600 text-white px-5 py-3 rounded-2xl font-bold text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {commentPending ? '...' : 'Отправить'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-4 sm:mt-8 flex flex-wrap justify-end items-center gap-3 sm:gap-6">
@@ -488,6 +734,34 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
               className="bg-slate-900 text-white px-6 sm:px-10 py-3 sm:py-4 rounded-3xl font-black shadow-lg shadow-slate-200 hover:scale-[1.02] transition-all disabled:opacity-60"
             >
               Закрепить
+            </button>
+          )}
+          {canMarkFixed && (
+            <button type="button" disabled={lifecyclePending}
+              onClick={() => handleStatusChange('Fixed')}
+              className="bg-emerald-600 text-white px-6 sm:px-10 py-3 sm:py-4 rounded-3xl font-black shadow-lg shadow-emerald-100 hover:scale-[1.02] transition-all disabled:opacity-60">
+              Fixed
+            </button>
+          )}
+          {canReject && (
+            <button type="button" disabled={lifecyclePending}
+              onClick={() => handleStatusChange('Rejected')}
+              className="bg-orange-500 text-white px-6 sm:px-10 py-3 sm:py-4 rounded-3xl font-black shadow-lg shadow-orange-100 hover:scale-[1.02] transition-all disabled:opacity-60">
+              Reject
+            </button>
+          )}
+          {canReject && (
+            <button type="button" disabled={lifecyclePending}
+              onClick={() => handleStatusChange("Can't Reproduce")}
+              className="bg-yellow-500 text-white px-6 sm:px-10 py-3 sm:py-4 rounded-3xl font-black shadow-lg shadow-yellow-100 hover:scale-[1.02] transition-all disabled:opacity-60">
+              Can't Reproduce
+            </button>
+          )}
+          {canReopen && (
+            <button type="button" disabled={lifecyclePending}
+              onClick={() => handleStatusChange('Reopened')}
+              className="bg-red-600 text-white px-6 sm:px-10 py-3 sm:py-4 rounded-3xl font-black shadow-lg shadow-red-100 hover:scale-[1.02] transition-all disabled:opacity-60">
+              Reopen
             </button>
           )}
           {canPass && (
