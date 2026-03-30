@@ -14,6 +14,7 @@ import (
 type JWTClaims struct {
 	Sub   string `json:"sub"`   // user id
 	Email string `json:"email"` // user email
+	Ver   int    `json:"ver"`   // jwt version
 	Iat   int64  `json:"iat"`
 	Exp   int64  `json:"exp"`
 }
@@ -31,7 +32,7 @@ func base64URLDecode(input string) ([]byte, error) {
 	return base64.RawURLEncoding.DecodeString(input)
 }
 
-func GenerateJWT(secret string, userID int, email string, ttl time.Duration) (string, error) {
+func GenerateJWT(secret string, userID int, email string, version int, ttl time.Duration) (string, error) {
 	if secret == "" {
 		return "", errors.New("JWT secret is empty")
 	}
@@ -40,6 +41,7 @@ func GenerateJWT(secret string, userID int, email string, ttl time.Duration) (st
 	claims := JWTClaims{
 		Sub:   strconv.Itoa(userID),
 		Email: email,
+		Ver:   version,
 		Iat:   now,
 		Exp:   now + int64(ttl.Seconds()),
 	}

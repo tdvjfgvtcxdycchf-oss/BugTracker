@@ -49,8 +49,7 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
     try {
       const res = await fetch(`${API_URL}/bugs/${bugId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ created_by: currentUserId }),
+        headers: authHeaders,
       });
 
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`);

@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type TaskTrackerService struct {
@@ -28,6 +29,12 @@ func (t *TaskTrackerService) Register(ctx context.Context, user sql.User) (int, 
 		slog.Warn("registration failed: email already taken", "email", user.Email)
 		return 0, "", errors.New("user already exists")
 	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return 0, "", err
+	}
+	user.Password = string(passwordHash)
 
 	id, err := sql.CreateUser(ctx, t.conn, user)
 	if err != nil {
@@ -54,9 +61,16 @@ func (t *TaskTrackerService) Login(ctx context.Context, user sql.User) (int, str
 		return 0, "", errors.New("user not exist")
 	}
 
-	if existingUser.Password != user.Password {
-		slog.Warn("login failed: the password is incorrect")
-		return 0, "", errors.New("password incorrect")
+	// Prefer bcrypt; keep backward compatibility for legacy plaintext users.
+	if err := bcrypt.CompareHashAndPassword([]byte(existingUser.Password), []byte(user.Password)); err != nil {
+		if existingUser.Password != user.Password {
+			slog.Warn("login failed: the password is incorrect")
+			return 0, "", errors.New("password incorrect")
+		}
+		// Legacy plaintext password matched: upgrade to bcrypt hash.
+		if hash, hashErr := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost); hashErr == nil {
+			_ = sql.UpdateUserPasswordHash(ctx, t.conn, existingUser.Id, string(hash))
+		}
 	}
 
 	slog.Info("user logined successfully", "id", existingUser.Id, "role", existingUser.Role)
@@ -67,11 +81,11 @@ func (t *TaskTrackerService) GetOtherUsersEmails(ctx context.Context, excludeId 
 	return sql.GetOtherUsersEmails(ctx, t.conn, excludeId)
 }
 
-func (t *TaskTrackerService) GetAllTasks(ctx context.Context) ([]sql.Task, error) {
-	return sql.GetAllTasks(ctx, t.conn)
+func (t *TaskTrackerService) GetTasksByProjectForUser(ctx context.Context, userID, projectID int) ([]sql.Task, error) {
+	return sql.GetTasksByProjectForUser(ctx, t.conn, userID, projectID)
 }
 
-func (t *TaskTrackerService) CreateTask(ctx context.Context, task sql.Task) error {
+func (t *TaskTrackerService) CreateTask(ctx context.Context, task sql.Task) (int, error) {
 	return sql.CreateTask(ctx, t.conn, task)
 }
 
@@ -101,6 +115,80 @@ func (t *TaskTrackerService) SaveBugPhoto(ctx context.Context, bugID int, data [
 
 func (t *TaskTrackerService) GetBugPhoto(ctx context.Context, bugID int) ([]byte, error) {
 	return sql.GetBugPhoto(ctx, t.conn, bugID)
+}
+
+func (t *TaskTrackerService) CanUserAccessTask(ctx context.Context, userID, taskID int) (bool, error) {
+	return sql.CanUserAccessTask(ctx, t.conn, userID, taskID)
+}
+
+func (t *TaskTrackerService) CanUserAccessBug(ctx context.Context, userID, bugID int) (bool, error) {
+	return sql.CanUserAccessBug(ctx, t.conn, userID, bugID)
+}
+
+func (t *TaskTrackerService) GetRelationFromBugID(ctx context.Context, relID int) (int, error) {
+	return sql.GetRelationFromBugID(ctx, t.conn, relID)
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+
+func (t *TaskTrackerService) EnsureOrgThread(ctx context.Context, orgID, actorUserID int) (int, error) {
+	return sql.EnsureOrgThread(ctx, t.conn, orgID, actorUserID)
+}
+
+func (t *TaskTrackerService) EnsureProjectThread(ctx context.Context, projectID, actorUserID int) (int, error) {
+	return sql.EnsureProjectThread(ctx, t.conn, projectID, actorUserID)
+}
+
+func (t *TaskTrackerService) EnsureDMThreadByEmail(ctx context.Context, email string, actorUserID int) (int, error) {
+	return sql.EnsureDMThreadByEmail(ctx, t.conn, email, actorUserID)
+}
+
+func (t *TaskTrackerService) GetOrgThread(ctx context.Context, orgID, actorUserID int) (*sql.ChatThread, error) {
+	return sql.GetOrgThread(ctx, t.conn, orgID, actorUserID)
+}
+
+func (t *TaskTrackerService) GetProjectThread(ctx context.Context, projectID, actorUserID int) (*sql.ChatThread, error) {
+	return sql.GetProjectThread(ctx, t.conn, projectID, actorUserID)
+}
+
+func (t *TaskTrackerService) GetOrgThreads(ctx context.Context, orgID, actorUserID int) ([]sql.ChatThread, error) {
+	return sql.GetOrgThreads(ctx, t.conn, orgID, actorUserID)
+}
+
+func (t *TaskTrackerService) GetProjectThreads(ctx context.Context, projectID, actorUserID int) ([]sql.ChatThread, error) {
+	return sql.GetProjectThreads(ctx, t.conn, projectID, actorUserID)
+}
+
+func (t *TaskTrackerService) GetDMThreads(ctx context.Context, actorUserID int) ([]sql.ChatThread, error) {
+	return sql.GetDMThreads(ctx, t.conn, actorUserID)
+}
+
+func (t *TaskTrackerService) AddChatMessage(ctx context.Context, threadID, actorUserID int, body string) (int, error) {
+	return sql.AddChatMessage(ctx, t.conn, threadID, actorUserID, body)
+}
+
+func (t *TaskTrackerService) GetChatMessages(ctx context.Context, threadID, actorUserID int, limit int, beforeID int) ([]sql.ChatMessage, error) {
+	return sql.GetChatMessages(ctx, t.conn, threadID, actorUserID, limit, beforeID)
+}
+
+func (t *TaskTrackerService) MarkThreadRead(ctx context.Context, threadID, actorUserID int) error {
+	return sql.MarkThreadRead(ctx, t.conn, threadID, actorUserID)
+}
+
+func (t *TaskTrackerService) UpdateChatMessage(ctx context.Context, messageID, actorUserID int, body string) (bool, error) {
+	return sql.UpdateChatMessage(ctx, t.conn, messageID, actorUserID, body)
+}
+
+func (t *TaskTrackerService) DeleteChatMessage(ctx context.Context, messageID, actorUserID int) (bool, error) {
+	return sql.DeleteChatMessage(ctx, t.conn, messageID, actorUserID)
+}
+
+func (t *TaskTrackerService) UpsertTypingState(ctx context.Context, threadID, actorUserID int, isTyping bool) error {
+	return sql.UpsertTypingState(ctx, t.conn, threadID, actorUserID, isTyping)
+}
+
+func (t *TaskTrackerService) GetTypingUsers(ctx context.Context, threadID, actorUserID int) ([]string, error) {
+	return sql.GetTypingUsers(ctx, t.conn, threadID, actorUserID)
 }
 
 // ── Comments ─────────────────────────────────────────────────────────────────
@@ -179,4 +267,74 @@ func (t *TaskTrackerService) GetUserRole(ctx context.Context, userID int) (strin
 
 func (t *TaskTrackerService) GetUserByID(ctx context.Context, userID int) (*sql.User, error) {
 	return sql.GetUserByID(ctx, t.conn, userID)
+}
+
+func (t *TaskTrackerService) GetUserAuthByID(ctx context.Context, userID int) (*sql.User, error) {
+	return sql.GetUserAuthByID(ctx, t.conn, userID)
+}
+
+func (t *TaskTrackerService) GetUserJWTVersion(ctx context.Context, userID int) (int, error) {
+	return sql.GetUserJWTVersion(ctx, t.conn, userID)
+}
+
+func (t *TaskTrackerService) IncrementUserJWTVersion(ctx context.Context, userID int) (int, error) {
+	return sql.IncrementUserJWTVersion(ctx, t.conn, userID)
+}
+
+func (t *TaskTrackerService) UpdateUserEmail(ctx context.Context, userID int, email string) error {
+	return sql.UpdateUserEmail(ctx, t.conn, userID, email)
+}
+
+func (t *TaskTrackerService) UpdateUserPasswordHash(ctx context.Context, userID int, hash string) error {
+	return sql.UpdateUserPasswordHash(ctx, t.conn, userID, hash)
+}
+
+// ── Orgs / Projects ───────────────────────────────────────────────────────────
+
+func (t *TaskTrackerService) GetUserOrgs(ctx context.Context, userID int) ([]sql.Organization, error) {
+	return sql.GetUserOrgs(ctx, t.conn, userID)
+}
+
+func (t *TaskTrackerService) CreateOrg(ctx context.Context, name string, ownerUserID int) (int, error) {
+	return sql.CreateOrg(ctx, t.conn, name, ownerUserID)
+}
+
+func (t *TaskTrackerService) GetUserProjects(ctx context.Context, userID, orgID int) ([]sql.Project, error) {
+	return sql.GetUserProjects(ctx, t.conn, userID, orgID)
+}
+
+func (t *TaskTrackerService) CreateProject(ctx context.Context, orgID int, name string, creatorUserID int) (int, error) {
+	return sql.CreateProject(ctx, t.conn, orgID, name, creatorUserID)
+}
+
+func (t *TaskTrackerService) AddUserToOrgByEmail(ctx context.Context, orgID int, email string, role string, actorUserID int) (bool, string, error) {
+	return sql.AddUserToOrgByEmail(ctx, t.conn, orgID, email, role, actorUserID)
+}
+
+func (t *TaskTrackerService) AddUserToProjectByEmail(ctx context.Context, projectID int, email string, role string, actorUserID int) (bool, string, error) {
+	return sql.AddUserToProjectByEmail(ctx, t.conn, projectID, email, role, actorUserID)
+}
+
+func (t *TaskTrackerService) GetOrgMembers(ctx context.Context, orgID, actorUserID int) ([]sql.OrgMember, error) {
+	return sql.GetOrgMembers(ctx, t.conn, orgID, actorUserID)
+}
+
+func (t *TaskTrackerService) GetProjectMembers(ctx context.Context, projectID, actorUserID int) ([]sql.ProjectMember, error) {
+	return sql.GetProjectMembers(ctx, t.conn, projectID, actorUserID)
+}
+
+func (t *TaskTrackerService) UpdateOrgMemberRole(ctx context.Context, orgID, targetUserID int, role string, actorUserID int) (bool, error) {
+	return sql.UpdateOrgMemberRole(ctx, t.conn, orgID, targetUserID, role, actorUserID)
+}
+
+func (t *TaskTrackerService) RemoveOrgMember(ctx context.Context, orgID, targetUserID, actorUserID int) (bool, error) {
+	return sql.RemoveOrgMember(ctx, t.conn, orgID, targetUserID, actorUserID)
+}
+
+func (t *TaskTrackerService) UpdateProjectMemberRole(ctx context.Context, projectID, targetUserID int, role string, actorUserID int) (bool, error) {
+	return sql.UpdateProjectMemberRole(ctx, t.conn, projectID, targetUserID, role, actorUserID)
+}
+
+func (t *TaskTrackerService) RemoveProjectMember(ctx context.Context, projectID, targetUserID, actorUserID int) (bool, error) {
+	return sql.RemoveProjectMember(ctx, t.conn, projectID, targetUserID, actorUserID)
 }

@@ -9,6 +9,12 @@ services:
     networks:
       - bug_tracker_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
 
   app:
     build:
@@ -19,12 +25,19 @@ services:
     env_file:
       - ./TaskTrackerBackend/docker/.env
     depends_on:
-      - postgres_db
+      postgres_db:
+        condition: service_healthy
     volumes:
       - uploads_data:/root/uploads
     networks:
       - bug_tracker_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
 
 volumes:
   postgres_data:

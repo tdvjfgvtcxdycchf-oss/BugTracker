@@ -207,8 +207,25 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     setPendingPhotoFile(null);
     if (isOpen && currentBug) {
       const id = currentBug.id ?? currentBug.id_pk;
-      setPhoto(`${API_URL}/bugs/${id}/photo?t=${Date.now()}`);
-      setPhotoName('фото');
+      if (!id) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          const res = await fetch(`${API_URL}/bugs/${id}/photo?t=${Date.now()}`, { headers: authHeaders });
+          if (!res.ok) return;
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          if (!cancelled) {
+            setPhoto(url);
+            setPhotoName('фото');
+          } else {
+            URL.revokeObjectURL(url);
+          }
+        } catch (e) {
+          // ignore
+        }
+      })();
+      return () => { cancelled = true; };
     } else {
       setPhoto(undefined);
       setPhotoName('');

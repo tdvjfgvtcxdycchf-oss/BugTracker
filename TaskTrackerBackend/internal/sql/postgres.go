@@ -11,6 +11,55 @@ import (
 	"github.com/joho/godotenv"
 )
 
+func CanUserAccessProject(ctx context.Context, conn *pgxpool.Pool, userID, projectID int) (bool, error) {
+	var ok bool
+	err := conn.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM projects p
+			WHERE p.id_pk = $1
+			  AND (
+			    EXISTS (SELECT 1 FROM project_member pm WHERE pm.project_id_fk = p.id_pk AND pm.user_id_fk = $2)
+			    OR EXISTS (SELECT 1 FROM org_member om WHERE om.org_id_fk = p.org_id_fk AND om.user_id_fk = $2 AND om.role IN ('owner','admin'))
+			  )
+		)
+	`, projectID, userID).Scan(&ok)
+	return ok, err
+}
+
+func CanUserAccessTask(ctx context.Context, conn *pgxpool.Pool, userID, taskID int) (bool, error) {
+	var projectID int
+	err := conn.QueryRow(ctx, `SELECT project_id_fk FROM Task WHERE id_pk = $1`, taskID).Scan(&projectID)
+	if err == pgx.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return CanUserAccessProject(ctx, conn, userID, projectID)
+}
+
+func CanUserAccessBug(ctx context.Context, conn *pgxpool.Pool, userID, bugID int) (bool, error) {
+	var taskID int
+	err := conn.QueryRow(ctx, `SELECT task_id_fk FROM Bug WHERE id_pk = $1`, bugID).Scan(&taskID)
+	if err == pgx.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return CanUserAccessTask(ctx, conn, userID, taskID)
+}
+
+func GetRelationFromBugID(ctx context.Context, conn *pgxpool.Pool, relID int) (int, error) {
+	var bugID int
+	err := conn.QueryRow(ctx, `SELECT from_bug_id_fk FROM bug_relation WHERE id_pk = $1`, relID).Scan(&bugID)
+	if err == pgx.ErrNoRows {
+		return 0, nil
+	}
+	return bugID, err
+}
+
 type User struct {
 	Id       int    `json:"id"`
 	Email    string `json:"email"`
@@ -69,6 +118,32 @@ type Task struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	OwnerId     int    `json:"owner_id"`
+	ProjectId   int    `json:"project_id"`
+}
+
+type Organization struct {
+	Id   int    `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role,omitempty"` // role of current user (when listing)
+}
+
+type Project struct {
+	Id    int    `json:"id"`
+	OrgId int    `json:"org_id"`
+	Name  string `json:"name"`
+	Role  string `json:"role,omitempty"` // role of current user (when listing)
+}
+
+type OrgMember struct {
+	UserId int    `json:"user_id"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
+}
+
+type ProjectMember struct {
+	UserId int    `json:"user_id"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
 }
 
 type Bug struct {
@@ -144,6 +219,11 @@ func CreateUser(ctx context.Context, conn *pgxpool.Pool, user User) (int, error)
 	return id, nil
 }
 
+func UpdateUserPasswordHash(ctx context.Context, conn *pgxpool.Pool, userID int, passwordHash string) error {
+	_, err := conn.Exec(ctx, `UPDATE "User" SET password = $1 WHERE id_pk = $2`, passwordHash, userID)
+	return err
+}
+
 func GetByEmail(ctx context.Context, conn *pgxpool.Pool, requestUser User) (*User, error) {
 	sqlQuery := `
 		SELECT id_pk, email, password, role FROM "User" WHERE email = $1
@@ -194,12 +274,24 @@ func GetOtherUsersEmails(ctx context.Context, conn *pgxpool.Pool, excludeId int)
 	return emails, nil
 }
 
-func GetAllTasks(ctx context.Context, conn *pgxpool.Pool) ([]Task, error) {
+func GetTasksByProjectForUser(ctx context.Context, conn *pgxpool.Pool, userID, projectID int) ([]Task, error) {
 	sqlQuery := `
-		SELECT id_pk, title, description, owner_id_fk FROM Task 
+		SELECT t.id_pk, t.title, t.description, t.owner_id_fk, t.project_id_fk
+		FROM Task t
+		WHERE t.project_id_fk = $1
+		  AND (
+		    EXISTS (SELECT 1 FROM project_member pm WHERE pm.project_id_fk = t.project_id_fk AND pm.user_id_fk = $2)
+		    OR EXISTS (
+		      SELECT 1
+		      FROM projects p
+		      JOIN org_member om ON om.org_id_fk = p.org_id_fk
+		      WHERE p.id_pk = t.project_id_fk AND om.user_id_fk = $2 AND om.role IN ('owner','admin')
+		    )
+		  )
+		ORDER BY t.id_pk;
 	`
 
-	rows, err := conn.Query(ctx, sqlQuery)
+	rows, err := conn.Query(ctx, sqlQuery, projectID, userID)
 	if err != nil {
 		slog.Error("database error", "error", err)
 		return nil, err
@@ -209,7 +301,7 @@ func GetAllTasks(ctx context.Context, conn *pgxpool.Pool) ([]Task, error) {
 	var tasks []Task
 	for rows.Next() {
 		var t Task
-		err := rows.Scan(&t.Id, &t.Title, &t.Description, &t.OwnerId)
+		err := rows.Scan(&t.Id, &t.Title, &t.Description, &t.OwnerId, &t.ProjectId)
 		if err != nil {
 			return nil, err
 		}
@@ -225,25 +317,354 @@ func GetAllTasks(ctx context.Context, conn *pgxpool.Pool) ([]Task, error) {
 	return tasks, nil
 }
 
-func CreateTask(ctx context.Context, conn *pgxpool.Pool, task Task) error {
+func CreateTask(ctx context.Context, conn *pgxpool.Pool, task Task) (int, error) {
 	sqlQuery := `
-		INSERT INTO Task (title, description, owner_id_fk)
-		VALUES ($1, $2, $3)
+		WITH can_write AS (
+			SELECT 1
+			FROM projects p
+			WHERE p.id_pk = $4
+			  AND (
+			    EXISTS (SELECT 1 FROM project_member pm WHERE pm.project_id_fk = p.id_pk AND pm.user_id_fk = $3)
+			    OR EXISTS (SELECT 1 FROM org_member om WHERE om.org_id_fk = p.org_id_fk AND om.user_id_fk = $3 AND om.role IN ('owner','admin'))
+			  )
+		)
+		INSERT INTO Task (title, description, owner_id_fk, project_id_fk)
+		SELECT $1, $2, $3, $4
+		WHERE EXISTS (SELECT 1 FROM can_write)
 		RETURNING id_pk;
 	`
 
-	id, err := conn.Exec(ctx, sqlQuery,
-		task.Title,
-		task.Description,
-		task.OwnerId,
-	)
+	var id int
+	err := conn.QueryRow(ctx, sqlQuery, task.Title, task.Description, task.OwnerId, task.ProjectId).Scan(&id)
 	if err != nil {
 		slog.Error("database error", "error", err)
-		return err
+		return 0, err
 	}
 	slog.Info("task successfully created", "task id", id)
 
-	return nil
+	return id, nil
+}
+
+func GetUserOrgs(ctx context.Context, conn *pgxpool.Pool, userID int) ([]Organization, error) {
+	rows, err := conn.Query(ctx, `
+		SELECT o.id_pk, o.name, om.role
+		FROM organizations o
+		JOIN org_member om ON om.org_id_fk = o.id_pk
+		WHERE om.user_id_fk = $1
+		ORDER BY o.id_pk
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []Organization
+	for rows.Next() {
+		var o Organization
+		if err := rows.Scan(&o.Id, &o.Name, &o.Role); err != nil {
+			return nil, err
+		}
+		list = append(list, o)
+	}
+	return list, rows.Err()
+}
+
+func CreateOrg(ctx context.Context, conn *pgxpool.Pool, name string, ownerUserID int) (int, error) {
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var orgID int
+	if err := tx.QueryRow(ctx, `INSERT INTO organizations (name) VALUES ($1) RETURNING id_pk`, name).Scan(&orgID); err != nil {
+		return 0, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO org_member (org_id_fk, user_id_fk, role) VALUES ($1,$2,'owner')`, orgID, ownerUserID)
+	if err != nil {
+		return 0, err
+	}
+
+	// Create a default project inside org so UI has something to select.
+	var projectID int
+	if err := tx.QueryRow(ctx, `INSERT INTO projects (org_id_fk, name) VALUES ($1,'General') RETURNING id_pk`, orgID).Scan(&projectID); err != nil {
+		return 0, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO project_member (project_id_fk, user_id_fk, role) VALUES ($1,$2,'pm')`, projectID, ownerUserID)
+	if err != nil {
+		return 0, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return orgID, nil
+}
+
+func GetUserOrgRole(ctx context.Context, conn *pgxpool.Pool, userID, orgID int) (string, error) {
+	var role string
+	err := conn.QueryRow(ctx, `SELECT role FROM org_member WHERE user_id_fk = $1 AND org_id_fk = $2`, userID, orgID).Scan(&role)
+	if err == pgx.ErrNoRows {
+		return "", nil
+	}
+	return role, err
+}
+
+func GetUserProjects(ctx context.Context, conn *pgxpool.Pool, userID, orgID int) ([]Project, error) {
+	// If org admin/owner -> all projects in org; else only membership projects.
+	role, err := GetUserOrgRole(ctx, conn, userID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	if role == "owner" || role == "admin" {
+		rows, err := conn.Query(ctx, `SELECT id_pk, org_id_fk, name FROM projects WHERE org_id_fk = $1 ORDER BY id_pk`, orgID)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var list []Project
+		for rows.Next() {
+			var p Project
+			if err := rows.Scan(&p.Id, &p.OrgId, &p.Name); err != nil {
+				return nil, err
+			}
+			list = append(list, p)
+		}
+		return list, rows.Err()
+	}
+
+	rows, err := conn.Query(ctx, `
+		SELECT p.id_pk, p.org_id_fk, p.name, pm.role
+		FROM projects p
+		JOIN project_member pm ON pm.project_id_fk = p.id_pk
+		WHERE p.org_id_fk = $1 AND pm.user_id_fk = $2
+		ORDER BY p.id_pk
+	`, orgID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []Project
+	for rows.Next() {
+		var p Project
+		if err := rows.Scan(&p.Id, &p.OrgId, &p.Name, &p.Role); err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, rows.Err()
+}
+
+func CreateProject(ctx context.Context, conn *pgxpool.Pool, orgID int, name string, creatorUserID int) (int, error) {
+	role, err := GetUserOrgRole(ctx, conn, creatorUserID, orgID)
+	if err != nil {
+		return 0, err
+	}
+	if role != "owner" && role != "admin" {
+		return 0, pgx.ErrNoRows
+	}
+	var id int
+	if err := conn.QueryRow(ctx, `INSERT INTO projects (org_id_fk, name) VALUES ($1,$2) RETURNING id_pk`, orgID, name).Scan(&id); err != nil {
+		return 0, err
+	}
+	// Make creator a pm in this project.
+	_, _ = conn.Exec(ctx, `INSERT INTO project_member (project_id_fk, user_id_fk, role) VALUES ($1,$2,'pm') ON CONFLICT DO NOTHING`, id, creatorUserID)
+	return id, nil
+}
+
+func AddUserToOrgByEmail(ctx context.Context, conn *pgxpool.Pool, orgID int, email string, role string, actorUserID int) (bool, string, error) {
+	actorRole, err := GetUserOrgRole(ctx, conn, actorUserID, orgID)
+	if err != nil {
+		return false, "", err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return false, "not_allowed", nil
+	}
+	var userID int
+	if err := conn.QueryRow(ctx, `SELECT id_pk FROM "User" WHERE email = $1`, email).Scan(&userID); err != nil {
+		if err == pgx.ErrNoRows {
+			return false, "user_not_found", nil
+		}
+		return false, "", err
+	}
+	if role == "" {
+		role = "member"
+	}
+	ct, err := conn.Exec(ctx, `INSERT INTO org_member (org_id_fk, user_id_fk, role) VALUES ($1,$2,$3) ON CONFLICT (org_id_fk,user_id_fk) DO UPDATE SET role = EXCLUDED.role`, orgID, userID, role)
+	if err != nil {
+		return false, "", err
+	}
+	return ct.RowsAffected() > 0, "", nil
+}
+
+func AddUserToProjectByEmail(ctx context.Context, conn *pgxpool.Pool, projectID int, email string, role string, actorUserID int) (bool, string, error) {
+	// check actor is org admin/owner of project's org
+	var orgID int
+	if err := conn.QueryRow(ctx, `SELECT org_id_fk FROM projects WHERE id_pk = $1`, projectID).Scan(&orgID); err != nil {
+		return false, "", err
+	}
+	actorRole, err := GetUserOrgRole(ctx, conn, actorUserID, orgID)
+	if err != nil {
+		return false, "", err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return false, "not_allowed", nil
+	}
+	var userID int
+	if err := conn.QueryRow(ctx, `SELECT id_pk FROM "User" WHERE email = $1`, email).Scan(&userID); err != nil {
+		if err == pgx.ErrNoRows {
+			return false, "user_not_found", nil
+		}
+		return false, "", err
+	}
+	if role == "" {
+		role = "viewer"
+	}
+	ct, err := conn.Exec(ctx, `INSERT INTO project_member (project_id_fk, user_id_fk, role) VALUES ($1,$2,$3) ON CONFLICT (project_id_fk,user_id_fk) DO UPDATE SET role = EXCLUDED.role`, projectID, userID, role)
+	if err != nil {
+		return false, "", err
+	}
+	return ct.RowsAffected() > 0, "", nil
+}
+
+func GetOrgMembers(ctx context.Context, conn *pgxpool.Pool, orgID, actorUserID int) ([]OrgMember, error) {
+	actorRole, err := GetUserOrgRole(ctx, conn, actorUserID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return nil, pgx.ErrNoRows
+	}
+	rows, err := conn.Query(ctx, `
+		SELECT om.user_id_fk, u.email, om.role
+		FROM org_member om
+		JOIN "User" u ON u.id_pk = om.user_id_fk
+		WHERE om.org_id_fk = $1
+		ORDER BY u.email
+	`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []OrgMember
+	for rows.Next() {
+		var m OrgMember
+		if err := rows.Scan(&m.UserId, &m.Email, &m.Role); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	return list, rows.Err()
+}
+
+func GetProjectMembers(ctx context.Context, conn *pgxpool.Pool, projectID, actorUserID int) ([]ProjectMember, error) {
+	var orgID int
+	if err := conn.QueryRow(ctx, `SELECT org_id_fk FROM projects WHERE id_pk = $1`, projectID).Scan(&orgID); err != nil {
+		return nil, err
+	}
+	actorRole, err := GetUserOrgRole(ctx, conn, actorUserID, orgID)
+	if err != nil {
+		return nil, err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return nil, pgx.ErrNoRows
+	}
+	rows, err := conn.Query(ctx, `
+		SELECT pm.user_id_fk, u.email, pm.role
+		FROM project_member pm
+		JOIN "User" u ON u.id_pk = pm.user_id_fk
+		WHERE pm.project_id_fk = $1
+		ORDER BY u.email
+	`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []ProjectMember
+	for rows.Next() {
+		var m ProjectMember
+		if err := rows.Scan(&m.UserId, &m.Email, &m.Role); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	return list, rows.Err()
+}
+
+func UpdateOrgMemberRole(ctx context.Context, conn *pgxpool.Pool, orgID, targetUserID int, role string, actorUserID int) (bool, error) {
+	actorRole, err := GetUserOrgRole(ctx, conn, actorUserID, orgID)
+	if err != nil {
+		return false, err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return false, nil
+	}
+	ct, err := conn.Exec(ctx, `UPDATE org_member SET role = $1 WHERE org_id_fk = $2 AND user_id_fk = $3`, role, orgID, targetUserID)
+	if err != nil {
+		return false, err
+	}
+	return ct.RowsAffected() > 0, nil
+}
+
+func RemoveOrgMember(ctx context.Context, conn *pgxpool.Pool, orgID, targetUserID, actorUserID int) (bool, error) {
+	actorRole, err := GetUserOrgRole(ctx, conn, actorUserID, orgID)
+	if err != nil {
+		return false, err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return false, nil
+	}
+	// Prevent removing last owner from org.
+	var targetRole string
+	_ = conn.QueryRow(ctx, `SELECT role FROM org_member WHERE org_id_fk = $1 AND user_id_fk = $2`, orgID, targetUserID).Scan(&targetRole)
+	if targetRole == "owner" {
+		var owners int
+		if err := conn.QueryRow(ctx, `SELECT COUNT(*) FROM org_member WHERE org_id_fk = $1 AND role = 'owner'`, orgID).Scan(&owners); err == nil && owners <= 1 {
+			return false, nil
+		}
+	}
+	ct, err := conn.Exec(ctx, `DELETE FROM org_member WHERE org_id_fk = $1 AND user_id_fk = $2`, orgID, targetUserID)
+	if err != nil {
+		return false, err
+	}
+	return ct.RowsAffected() > 0, nil
+}
+
+func UpdateProjectMemberRole(ctx context.Context, conn *pgxpool.Pool, projectID, targetUserID int, role string, actorUserID int) (bool, error) {
+	var orgID int
+	if err := conn.QueryRow(ctx, `SELECT org_id_fk FROM projects WHERE id_pk = $1`, projectID).Scan(&orgID); err != nil {
+		return false, err
+	}
+	actorRole, err := GetUserOrgRole(ctx, conn, actorUserID, orgID)
+	if err != nil {
+		return false, err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return false, nil
+	}
+	ct, err := conn.Exec(ctx, `UPDATE project_member SET role = $1 WHERE project_id_fk = $2 AND user_id_fk = $3`, role, projectID, targetUserID)
+	if err != nil {
+		return false, err
+	}
+	return ct.RowsAffected() > 0, nil
+}
+
+func RemoveProjectMember(ctx context.Context, conn *pgxpool.Pool, projectID, targetUserID, actorUserID int) (bool, error) {
+	var orgID int
+	if err := conn.QueryRow(ctx, `SELECT org_id_fk FROM projects WHERE id_pk = $1`, projectID).Scan(&orgID); err != nil {
+		return false, err
+	}
+	actorRole, err := GetUserOrgRole(ctx, conn, actorUserID, orgID)
+	if err != nil {
+		return false, err
+	}
+	if actorRole != "owner" && actorRole != "admin" {
+		return false, nil
+	}
+	ct, err := conn.Exec(ctx, `DELETE FROM project_member WHERE project_id_fk = $1 AND user_id_fk = $2`, projectID, targetUserID)
+	if err != nil {
+		return false, err
+	}
+	return ct.RowsAffected() > 0, nil
 }
 
 func GetBugsByTaskId(ctx context.Context, conn *pgxpool.Pool, taskId int) ([]Bug, error) {
@@ -361,15 +782,24 @@ func ChangeBug(ctx context.Context, conn *pgxpool.Pool, bug Bug, assignedEmail s
 	return err
 }
 
-func DeleteTask(ctx context.Context, conn *pgxpool.Pool, taskID int, ownerID int) (bool, error) {
+func DeleteTask(ctx context.Context, conn *pgxpool.Pool, taskID int, actorUserID int) (bool, error) {
 	var deletedID int
 	err := conn.QueryRow(
 		ctx,
-		`DELETE FROM Task
-		 WHERE id_pk = $1 AND owner_id_fk = $2
+		`DELETE FROM Task t
+		 WHERE t.id_pk = $1
+		   AND (
+		     t.owner_id_fk = $2
+		     OR EXISTS (
+		       SELECT 1
+		       FROM projects p
+		       JOIN org_member om ON om.org_id_fk = p.org_id_fk
+		       WHERE p.id_pk = t.project_id_fk AND om.user_id_fk = $2 AND om.role IN ('owner','admin')
+		     )
+		   )
 		 RETURNING id_pk`,
 		taskID,
-		ownerID,
+		actorUserID,
 	).Scan(&deletedID)
 
 	if err == pgx.ErrNoRows {
@@ -382,15 +812,26 @@ func DeleteTask(ctx context.Context, conn *pgxpool.Pool, taskID int, ownerID int
 	return true, nil
 }
 
-func DeleteBug(ctx context.Context, conn *pgxpool.Pool, bugID int, creatorID int) (bool, error) {
+func DeleteBug(ctx context.Context, conn *pgxpool.Pool, bugID int, actorUserID int) (bool, error) {
 	var deletedID int
 	err := conn.QueryRow(
 		ctx,
 		`DELETE FROM Bug
-		 WHERE id_pk = $1 AND created_by_fk = $2
+		 WHERE id_pk = $1
+		   AND (
+		     created_by_fk = $2
+		     OR EXISTS (
+		       SELECT 1
+		       FROM Bug b
+		       JOIN Task t ON t.id_pk = b.task_id_fk
+		       JOIN projects p ON p.id_pk = t.project_id_fk
+		       JOIN org_member om ON om.org_id_fk = p.org_id_fk
+		       WHERE b.id_pk = $1 AND om.user_id_fk = $2 AND om.role IN ('owner','admin')
+		     )
+		   )
 		 RETURNING id_pk`,
 		bugID,
-		creatorID,
+		actorUserID,
 	).Scan(&deletedID)
 
 	if err == pgx.ErrNoRows {
@@ -463,6 +904,40 @@ func GetUserByID(ctx context.Context, conn *pgxpool.Pool, userID int) (*User, er
 		return nil, err
 	}
 	return &u, nil
+}
+
+func GetUserAuthByID(ctx context.Context, conn *pgxpool.Pool, userID int) (*User, error) {
+	var u User
+	err := conn.QueryRow(ctx,
+		`SELECT id_pk, email, password, role FROM "User" WHERE id_pk = $1`, userID,
+	).Scan(&u.Id, &u.Email, &u.Password, &u.Role)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+func UpdateUserEmail(ctx context.Context, conn *pgxpool.Pool, userID int, email string) error {
+	_, err := conn.Exec(ctx, `UPDATE "User" SET email = $1 WHERE id_pk = $2`, email, userID)
+	return err
+}
+
+func GetUserJWTVersion(ctx context.Context, conn *pgxpool.Pool, userID int) (int, error) {
+	var v int
+	err := conn.QueryRow(ctx, `SELECT jwt_version FROM "User" WHERE id_pk = $1`, userID).Scan(&v)
+	if err == pgx.ErrNoRows {
+		return 0, nil
+	}
+	return v, err
+}
+
+func IncrementUserJWTVersion(ctx context.Context, conn *pgxpool.Pool, userID int) (int, error) {
+	var v int
+	err := conn.QueryRow(ctx, `UPDATE "User" SET jwt_version = jwt_version + 1 WHERE id_pk = $1 RETURNING jwt_version`, userID).Scan(&v)
+	return v, err
 }
 
 // ── Comments ─────────────────────────────────────────────────────────────────

@@ -2,11 +2,14 @@ package server
 
 import (
 	"bug_tracker/internal/auth"
+	"bug_tracker/internal/sql"
 	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ctxKey string
@@ -22,7 +25,7 @@ func GetUserIDFromContext(ctx context.Context) (int, bool) {
 	return id, ok
 }
 
-func jwtAuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
+func jwtAuthMiddleware(jwtSecret string, conn *pgxpool.Pool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if jwtSecret == "" {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -57,6 +60,13 @@ func jwtAuthMiddleware(jwtSecret string, next http.Handler) http.Handler {
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid token sub"})
+			return
+		}
+
+		ver, err := sql.GetUserJWTVersion(r.Context(), conn, userID)
+		if err != nil || ver != claims.Ver {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "token revoked"})
 			return
 		}
 

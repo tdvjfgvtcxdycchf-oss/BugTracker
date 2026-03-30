@@ -15,10 +15,19 @@ import (
 )
 
 func CORS(next http.Handler) http.Handler {
+	allowedOrigin := os.Getenv("CORS_ALLOW_ORIGIN")
+	if allowedOrigin == "" {
+		allowedOrigin = "https://bugtracker.sytes.net"
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := r.Header.Get("Origin")
+		if origin == allowedOrigin {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		}
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, PATCH, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, ngrok-skip-browser-warning")
+		w.Header().Set("Vary", "Origin")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -53,6 +62,11 @@ func main() {
 
 	slog.Info("starting bug tracker application")
 
+	if os.Getenv("JWT_SECRET") == "" {
+		slog.Error("JWT_SECRET is empty")
+		os.Exit(1)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -68,8 +82,12 @@ func main() {
 	handlerWithCORS := CORS(router)
 
 	srv := &http.Server{
-		Addr:    ":8081",
-		Handler: handlerWithCORS,
+		Addr:              ":8081",
+		Handler:           handlerWithCORS,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       20 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {

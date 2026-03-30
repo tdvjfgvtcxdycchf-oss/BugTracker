@@ -3,6 +3,9 @@ import { Navigate, BrowserRouter, Routes, Route } from 'react-router-dom';
 import AuthPage from './AuthPage';
 import MainPage from './MainPage';
 import AnalyticsPage from './AnalyticsPage';
+import AdminPage from './AdminPage';
+import ChatPage from './ChatPage';
+import ProfilePage from './ProfilePage';
 
 
 export default function App() {
@@ -17,6 +20,9 @@ export default function App() {
           <Route path="/" element={isAuthenticated ? <MainPage/> : <Navigate to="/login" replace/>} />
           <Route path="/login" element={<AuthPage/>} />
           <Route path="/analytics" element={isAuthenticated ? <AnalyticsPage onBack={() => window.history.back()} /> : <Navigate to="/login" replace/>} />
+          <Route path="/admin" element={isAuthenticated ? <AdminPage onBack={() => window.history.back()} /> : <Navigate to="/login" replace/>} />
+          <Route path="/chat" element={isAuthenticated ? <ChatPage onBack={() => window.history.back()} /> : <Navigate to="/login" replace/>} />
+          <Route path="/profile" element={isAuthenticated ? <ProfilePage onBack={() => window.history.back()} /> : <Navigate to="/login" replace/>} />
         </Routes>
       </main>
     </BrowserRouter>

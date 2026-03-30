@@ -12,15 +12,62 @@ function Dashboard() {
     const [selectedTask, setSelectedTask] = useState<any>(null);
     const [selectedBugId, setSelectedBugId] = useState<string | undefined>();
     const [tasks, setTasks] = useState<any[]>([]);
+    const [orgs, setOrgs] = useState<any[]>([]);
+    const [projects, setProjects] = useState<any[]>([]);
+    const [selectedOrgId, setSelectedOrgId] = useState<number>(() => Number(localStorage.getItem('selectedOrgId') || '0'));
+    const [selectedProjectId, setSelectedProjectId] = useState<number>(() => Number(localStorage.getItem('selectedProjectId') || '0'));
     const [isLoading, setIsLoading] = useState(true);
     const currentUserId = Number(localStorage.getItem('userId') || '0');
     const jwtToken = localStorage.getItem('jwtToken') || '';
     const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
 
+    const fetchOrgs = async () => {
+        try {
+            const res = await fetch(`${API_URL}/orgs`, { headers: authHeaders });
+            const data = await res.json();
+            const list = Array.isArray(data) ? data : [];
+            setOrgs(list);
+            const stored = Number(localStorage.getItem('selectedOrgId') || '0');
+            const firstId = list[0]?.id || 0;
+            const nextOrg = stored && list.some((o: any) => o.id === stored) ? stored : firstId;
+            if (nextOrg && nextOrg !== selectedOrgId) {
+                setSelectedOrgId(nextOrg);
+                localStorage.setItem('selectedOrgId', String(nextOrg));
+            }
+            const role = list.find((o: any) => o.id === (nextOrg || selectedOrgId))?.role;
+            if (role) localStorage.setItem('selectedOrgRole', String(role));
+        } catch (e) {
+            console.error('Fetch orgs error', e);
+        }
+    };
+
+    const fetchProjects = async (orgId: number) => {
+        if (!orgId) return;
+        try {
+            const res = await fetch(`${API_URL}/projects?org_id=${orgId}`, { headers: authHeaders });
+            const data = await res.json();
+            const list = Array.isArray(data) ? data : [];
+            setProjects(list);
+            const stored = Number(localStorage.getItem('selectedProjectId') || '0');
+            const firstId = list[0]?.id || 0;
+            const nextProject = stored && list.some((p: any) => p.id === stored) ? stored : firstId;
+            if (nextProject && nextProject !== selectedProjectId) {
+                setSelectedProjectId(nextProject);
+                localStorage.setItem('selectedProjectId', String(nextProject));
+            }
+        } catch (e) {
+            console.error('Fetch projects error', e);
+        }
+    };
+
     const fetchTasks = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`${API_URL}/tasks`, {
+            if (!selectedProjectId) {
+                setTasks([]);
+                return;
+            }
+            const response = await fetch(`${API_URL}/tasks?project_id=${selectedProjectId}`, {
                 headers: authHeaders,
             });
             const data = await response.json();
@@ -29,7 +76,9 @@ function Dashboard() {
         finally { setIsLoading(false); }
     };
 
-    useEffect(() => { fetchTasks(); }, []);
+    useEffect(() => { fetchOrgs(); }, []);
+    useEffect(() => { if (selectedOrgId) fetchProjects(selectedOrgId); }, [selectedOrgId]);
+    useEffect(() => { fetchTasks(); }, [selectedProjectId]);
 
     const handleDeleteTask = async (taskId: number) => {
         if (!taskId || !currentUserId) return;
@@ -62,10 +111,11 @@ function Dashboard() {
         try {
             const userId = localStorage.getItem('userId');
             if (!userId) return alert("Ошибка: Авторизуйтесь снова");
+            if (!selectedProjectId) return alert("Выберите проект");
             const response = await fetch(`${API_URL}/tasks`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', ...authHeaders },
-                body: JSON.stringify({ title: data.name, description: data.desc, owner_id: Number(userId) }),
+                body: JSON.stringify({ title: data.name, description: data.desc, project_id: selectedProjectId }),
             });
             if (!response.ok) throw new Error('Не удалось создать задачу');
             await fetchTasks();
@@ -87,6 +137,41 @@ function Dashboard() {
                     <p className="text-sm text-gray-400 mt-0.5">{tasks.length} активных задач</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate('/chat')}
+                        className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all text-sm"
+                    >
+                        Чаты
+                    </button>
+                    <select
+                        value={selectedOrgId || ''}
+                        onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setSelectedOrgId(v);
+                            setSelectedProjectId(0);
+                            localStorage.setItem('selectedOrgId', String(v));
+                            localStorage.removeItem('selectedProjectId');
+                        }}
+                        className="bg-white border border-slate-200 text-slate-700 px-3 py-2.5 rounded-xl text-sm font-semibold"
+                    >
+                        {orgs.map((o: any) => (
+                            <option key={o.id} value={o.id}>{o.name}</option>
+                        ))}
+                    </select>
+                    <select
+                        value={selectedProjectId || ''}
+                        onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setSelectedProjectId(v);
+                            localStorage.setItem('selectedProjectId', String(v));
+                        }}
+                        className="bg-white border border-slate-200 text-slate-700 px-3 py-2.5 rounded-xl text-sm font-semibold"
+                        disabled={!selectedOrgId}
+                    >
+                        {projects.map((p: any) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                    </select>
                     {canViewAnalytics && (
                         <button
                             onClick={() => navigate('/analytics')}
@@ -177,6 +262,8 @@ function Header() {
     const navigate = useNavigate();
     const userEmail = localStorage.getItem('userEmail') || 'Guest';
     const initials = userEmail.slice(0, 2).toUpperCase();
+    const selectedOrgRole = localStorage.getItem('selectedOrgRole') || '';
+    const canAdmin = selectedOrgRole === 'owner' || selectedOrgRole === 'admin';
 
     const handleLogout = () => { localStorage.clear(); navigate('/login'); window.location.reload(); };
 
@@ -198,6 +285,20 @@ function Header() {
                 {isOpen && (
                     <div className="absolute right-0 mt-2 w-52 bg-white border border-gray-100 rounded-xl shadow-xl py-1 z-50">
                         <div className="px-4 py-2.5 text-xs text-gray-400 border-b border-gray-50 truncate">{userEmail}</div>
+                        {canAdmin && (
+                            <button
+                                onClick={() => { setIsOpen(false); navigate('/admin'); }}
+                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
+                            >
+                                Управление
+                            </button>
+                        )}
+                        <button
+                            onClick={() => { setIsOpen(false); navigate('/profile'); }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
+                        >
+                            Профиль
+                        </button>
                         <button onClick={handleLogout} className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 font-medium transition-colors">
                             Выйти
                         </button>
