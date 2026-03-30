@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from './config';
 import TaskModal from './TaskModal';
@@ -128,6 +128,24 @@ function Dashboard() {
 
     const userRole = localStorage.getItem('userRole') || 'qa';
     const canViewAnalytics = userRole === 'pm' || userRole === 'admin';
+
+    if (!isLoading && orgs.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
+                <div className="text-6xl mb-5">🏢</div>
+                <h2 className="text-2xl font-black text-slate-900 mb-2">Добро пожаловать!</h2>
+                <p className="text-slate-500 mb-6 max-w-xs">
+                    Чтобы начать работу, создайте первую организацию и проект.
+                </p>
+                <button
+                    onClick={() => navigate('/admin')}
+                    className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all"
+                >
+                    Создать организацию
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="p-4 sm:p-8 w-full max-w-4xl mx-auto">
@@ -262,9 +280,6 @@ function Header() {
     const navigate = useNavigate();
     const userEmail = localStorage.getItem('userEmail') || 'Guest';
     const initials = userEmail.slice(0, 2).toUpperCase();
-    const selectedOrgRole = localStorage.getItem('selectedOrgRole') || '';
-    const canAdmin = selectedOrgRole === 'owner' || selectedOrgRole === 'admin';
-
     const handleLogout = () => { localStorage.clear(); navigate('/login'); window.location.reload(); };
 
     return (
@@ -285,14 +300,12 @@ function Header() {
                 {isOpen && (
                     <div className="absolute right-0 mt-2 w-52 bg-white border border-gray-100 rounded-xl shadow-xl py-1 z-50">
                         <div className="px-4 py-2.5 text-xs text-gray-400 border-b border-gray-50 truncate">{userEmail}</div>
-                        {canAdmin && (
-                            <button
-                                onClick={() => { setIsOpen(false); navigate('/admin'); }}
-                                className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
-                            >
-                                Управление
-                            </button>
-                        )}
+                        <button
+                            onClick={() => { setIsOpen(false); navigate('/admin'); }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
+                        >
+                            Управление
+                        </button>
                         <button
                             onClick={() => { setIsOpen(false); navigate('/profile'); }}
                             className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
