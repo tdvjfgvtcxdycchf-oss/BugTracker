@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { API_URL } from './config';
 
 interface BugsModalProps {
@@ -78,7 +78,7 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
         <div className="p-6 border-b flex justify-between items-center bg-gray-50 rounded-t-2xl">
           <div>
             <h2 className="text-xl font-black text-gray-900 line-clamp-1">{task.title}</h2>
-            <p className="text-[10px] text-blue-500 font-bold uppercase tracking-widest mt-1">Репозиторий багов</p>
+            <p className="text-[10px] text-[#7C5CBF] font-bold uppercase tracking-widest mt-1">Репозиторий багов</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-900 text-3xl">&times;</button>
         </div>

@@ -1,109 +1,132 @@
 import { useState, useEffect } from 'react';
 import { API_URL } from './config';
 
+const P = '#7C5CBF';
+
 interface StatItem { status: string; count: number; }
-interface Task { id: number; title: string; }
 
 const STATUS_COLORS: Record<string, string> = {
-  'New': 'bg-slate-400',
-  'Open': 'bg-blue-500',
-  'In Progress': 'bg-indigo-500',
-  'Fixed': 'bg-emerald-500',
-  'Ready for Retest': 'bg-cyan-500',
-  'Verified': 'bg-green-600',
-  'Reopened': 'bg-red-500',
-  'Rejected': 'bg-orange-500',
-  "Can't Reproduce": 'bg-yellow-500',
+  'New': '#94A3B8',
+  'Open': '#3B82F6',
+  'In Progress': '#6366F1',
+  'Fixed': '#10B981',
+  'Ready for Retest': '#06B6D4',
+  'Verified': '#16A34A',
+  'Reopened': '#EF4444',
+  'Rejected': '#F97316',
+  "Can't Reproduce": '#EAB308',
 };
 
-export default function AnalyticsPage({ onBack }: { onBack: () => void }) {
+export default function AnalyticsPage() {
   const jwtToken = localStorage.getItem('jwtToken') || '';
   const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
 
   const [stats, setStats] = useState<StatItem[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [selectedTaskId, setSelectedTaskId] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [orgs, setOrgs] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState(() => Number(localStorage.getItem('selectedOrgId') || '0'));
+  const [selectedProjectId, setSelectedProjectId] = useState(() => Number(localStorage.getItem('selectedProjectId') || '0'));
 
   useEffect(() => {
-    fetch(`${API_URL}/tasks`, { headers: authHeaders })
-      .then(r => r.json())
-      .then(d => setTasks(Array.isArray(d) ? d : []))
-      .catch(console.error);
+    fetch(`${API_URL}/orgs`, { headers: authHeaders })
+      .then(r => r.json()).then(d => setOrgs(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
   useEffect(() => {
+    if (!selectedOrgId) return;
+    fetch(`${API_URL}/projects?org_id=${selectedOrgId}`, { headers: authHeaders })
+      .then(r => r.json()).then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => {});
+  }, [selectedOrgId]);
+
+  useEffect(() => {
     setLoading(true);
-    const url = selectedTaskId
-      ? `${API_URL}/stats/tasks/${selectedTaskId}`
-      : `${API_URL}/stats`;
-    fetch(url, { headers: authHeaders })
+    fetch(`${API_URL}/stats`, { headers: authHeaders })
       .then(r => r.json())
       .then(d => setStats(Array.isArray(d) ? d : []))
-      .catch(console.error)
+      .catch(() => {})
       .finally(() => setLoading(false));
-  }, [selectedTaskId]);
+  }, [selectedProjectId]);
 
   const total = stats.reduce((s, x) => s + x.count, 0);
   const sorted = [...stats].sort((a, b) => b.count - a.count);
 
+  const getCount = (status: string) => stats.find(s => s.status === status)?.count ?? 0;
+
+  const summaryCards = [
+    { label: 'Открыто:', value: getCount('Open') },
+    { label: 'Найдено:', value: getCount('Fixed') },
+    { label: 'Новых:', value: getCount('New') },
+    { label: 'Переотк.:', value: getCount('Reopened') },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-3xl mx-auto space-y-8">
+    <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-xl font-bold text-gray-900 text-center mb-6">Аналитика</h1>
 
-        <div className="flex items-center gap-4">
-          <button onClick={onBack} className="text-slate-500 hover:text-slate-900 text-2xl leading-none">←</button>
-          <div>
-            <h1 className="text-3xl font-black text-slate-900">Аналитика</h1>
-            <p className="text-sm text-slate-500">Статистика по багам</p>
-          </div>
-        </div>
-
-        <div className="flex gap-3 items-center">
+      {/* Filters */}
+      <div className="flex gap-3 mb-6">
+        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2.5 flex-1">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <select
-            value={selectedTaskId}
-            onChange={e => setSelectedTaskId(e.target.value)}
-            className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-sm outline-none"
+            value={selectedOrgId || ''}
+            onChange={e => { const v = Number(e.target.value); setSelectedOrgId(v); localStorage.setItem('selectedOrgId', String(v)); }}
+            className="flex-1 text-sm text-gray-700 bg-transparent outline-none"
           >
-            <option value="">Все задачи</option>
-            {tasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+            <option value="">Выберите организацию</option>
+            {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
           </select>
-          {loading && <span className="text-sm text-slate-400">Загрузка...</span>}
         </div>
+        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2.5 flex-1">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 12l2 2 4-4"/></svg>
+          <select
+            value={selectedProjectId || ''}
+            onChange={e => { const v = Number(e.target.value); setSelectedProjectId(v); localStorage.setItem('selectedProjectId', String(v)); }}
+            className="flex-1 text-sm text-gray-700 bg-transparent outline-none"
+            disabled={!selectedOrgId}
+          >
+            <option value="">Выберите проект</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 col-span-2 sm:col-span-4">
-            <p className="text-xs font-bold text-slate-400 uppercase mb-1">Всего багов</p>
-            <p className="text-5xl font-black text-slate-900">{total}</p>
+      {/* Stats */}
+      <div className="grid grid-cols-5 gap-3 mb-6">
+        <div className="col-span-2 rounded-2xl p-5 flex flex-col justify-center" style={{ background: P }}>
+          <p className="text-white/80 text-xs font-medium">Всего багов:</p>
+          <p className="text-white text-4xl font-black mt-1">{total}</p>
+        </div>
+        {summaryCards.map(c => (
+          <div key={c.label} className="bg-white rounded-2xl p-4 border border-gray-100 flex flex-col items-center justify-center text-center">
+            <p className="text-gray-500 text-[11px] font-medium leading-tight mb-1">{c.label}</p>
+            <p className="text-2xl font-black text-gray-900">{c.value}</p>
           </div>
-          {sorted.slice(0, 4).map(s => (
-            <div key={s.status} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase mb-1 truncate">{s.status}</p>
-              <p className="text-3xl font-black text-slate-900">{s.count}</p>
-            </div>
-          ))}
-        </div>
+        ))}
+      </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-4">
-          <h2 className="text-lg font-black text-slate-900">По статусам</h2>
-          {total === 0 && !loading && <p className="text-sm text-slate-400">Нет данных</p>}
+      {/* Bar chart */}
+      <div className="bg-white rounded-2xl p-5 border border-gray-100">
+        <h2 className="font-bold text-gray-900 mb-4">По статусам</h2>
+        {loading && <p className="text-sm text-gray-400">Загрузка...</p>}
+        {!loading && total === 0 && <p className="text-sm text-gray-400">Нет данных</p>}
+        <div className="space-y-3">
           {sorted.map(s => {
             const pct = total > 0 ? Math.round((s.count / total) * 100) : 0;
-            const color = STATUS_COLORS[s.status] ?? 'bg-slate-300';
+            const color = STATUS_COLORS[s.status] ?? '#CBD5E1';
             return (
               <div key={s.status}>
                 <div className="flex justify-between text-sm mb-1">
-                  <span className="font-semibold text-slate-700">{s.status}</span>
-                  <span className="text-slate-500">{s.count} ({pct}%)</span>
+                  <span className="text-gray-700">{s.status}</span>
+                  <span className="text-gray-400">{s.count} ({pct}%)</span>
                 </div>
-                <div className="w-full bg-slate-100 rounded-full h-2.5">
-                  <div className={`${color} h-2.5 rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div className="h-2 rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
                 </div>
               </div>
             );
           })}
         </div>
-
       </div>
     </div>
   );

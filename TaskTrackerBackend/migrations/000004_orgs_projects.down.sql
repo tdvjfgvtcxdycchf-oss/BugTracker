@@ -1,7 +1,0 @@
-ALTER TABLE Task DROP CONSTRAINT IF EXISTS fk_task_project;
-ALTER TABLE Task DROP COLUMN IF EXISTS project_id_fk;
-
-DROP TABLE IF EXISTS project_member;
-DROP TABLE IF EXISTS projects;
-DROP TABLE IF EXISTS org_member;
-DROP TABLE IF EXISTS organizations;

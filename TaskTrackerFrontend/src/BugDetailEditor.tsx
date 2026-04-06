@@ -583,7 +583,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
               <div className="flex flex-wrap gap-2">
                 {['Win', 'Mac', 'Linux', 'iOS', 'Android'].map(os => (
                   <button key={os} onClick={() => setSelectedOS(prev => prev.includes(os) ? prev.filter(o => o !== os) : [...prev, os])}
-                    className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${selectedOS.includes(os) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-100'}`}>
+                    className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${selectedOS.includes(os) ? 'text-white border-[#7C5CBF]' : 'bg-white text-slate-600 border-slate-100'}`} style={selectedOS.includes(os) ? { background: '#7C5CBF' } : {}}>
                     {os}
                   </button>
                 ))}
@@ -732,7 +732,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
                   type="button"
                   disabled={commentPending || !commentBody.trim()}
                   onClick={handleAddComment}
-                  className="self-end bg-blue-600 text-white px-5 py-3 rounded-2xl font-bold text-sm hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  className="self-end text-white px-5 py-3 rounded-2xl font-bold text-sm disabled:opacity-50 transition-colors" style={{ background: '#7C5CBF' }}
                 >
                   {commentPending ? '...' : 'Отправить'}
                 </button>

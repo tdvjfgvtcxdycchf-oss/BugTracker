@@ -4,12 +4,13 @@ set -e
 DOMAIN="bugtracker.sytes.net"
 APP_DIR="/home/zolbrain/BugTracker"
 WWW_DIR="/var/www/bugtracker"
-API_URL="https://bugtracker.sytes.net/api"
+
+# Адрес бэкенда (сервер друга) — поменяй на реальный URL когда будет готово
+API_URL="http://176.108.248.47:9191"
 
 echo "=== Checking required tools ==="
 command -v git >/dev/null
 command -v npm >/dev/null
-command -v docker >/dev/null
 command -v nginx >/dev/null
 
 echo "=== Pulling latest code ==="
@@ -21,16 +22,12 @@ fi
 git fetch origin "$CURRENT_BRANCH"
 git pull --ff-only origin "$CURRENT_BRANCH"
 
-# Проверяем наличие .env для бэкенда
-ENV_FILE="$APP_DIR/TaskTrackerBackend/docker/.env"
-if [ ! -f "$ENV_FILE" ]; then
-  echo "ERROR: $ENV_FILE не найден!"
-  echo "Создайте его вручную:"
-  echo "  POSTGRES_DB=postgres"
-  echo "  POSTGRES_USER=postgres"
-  echo "  POSTGRES_PASSWORD=<ваш_пароль>"
-  echo "  POSTGRES_URL=postgres://postgres:<ваш_пароль>@postgres_db:5432/postgres?sslmode=disable"
-  exit 1
+echo "=== Stopping and removing backend containers ==="
+if docker compose -f docker-compose.prod.yml ps -q 2>/dev/null | grep -q .; then
+  docker compose -f docker-compose.prod.yml down
+  echo "Backend stopped."
+else
+  echo "No running containers, skipping."
 fi
 
 echo "=== Building frontend ==="
@@ -42,10 +39,6 @@ echo "=== Deploying frontend static files ==="
 rm -rf "$WWW_DIR"
 mkdir -p "$WWW_DIR"
 cp -r dist/* "$WWW_DIR/"
-
-echo "=== Restarting backend ==="
-cd "$APP_DIR"
-docker compose -f docker-compose.prod.yml up -d --build
 
 echo "=== Reloading nginx ==="
 nginx -t && systemctl reload nginx

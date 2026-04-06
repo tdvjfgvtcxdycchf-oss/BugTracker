@@ -1,31 +1,34 @@
-import { useState } from 'react';
 import { Navigate, BrowserRouter, Routes, Route } from 'react-router-dom';
+import Layout from './Layout';
 import AuthPage from './AuthPage';
 import MainPage from './MainPage';
 import AnalyticsPage from './AnalyticsPage';
 import AdminPage from './AdminPage';
 import ChatPage from './ChatPage';
 import ProfilePage from './ProfilePage';
+import NewTaskPage from './NewTaskPage';
 
+function isAuth() {
+  return localStorage.getItem('isAuthenticated') === 'true' && !!localStorage.getItem('jwtToken');
+}
+
+function Protected({ el }: { el: React.ReactNode }) {
+  if (!isAuth()) return <Navigate to="/login" replace />;
+  return <Layout>{el}</Layout>;
+}
 
 export default function App() {
-  const [isAuthenticated] = useState(
-    localStorage.getItem('isAuthenticated') === 'true' && !!localStorage.getItem('jwtToken')
-  );
   return (
     <BrowserRouter>
-      <main className="">
-        <Routes>
-          <Route path="/" element={isAuthenticated ? <MainPage/> : <Navigate to="/login" replace/>} />
-          <Route path="/login" element={<AuthPage/>} />
-          <Route path="/analytics" element={isAuthenticated ? <AnalyticsPage onBack={() => window.history.back()} /> : <Navigate to="/login" replace/>} />
-          <Route path="/admin" element={isAuthenticated ? <AdminPage onBack={() => window.history.back()} /> : <Navigate to="/login" replace/>} />
-          <Route path="/chat" element={isAuthenticated ? <ChatPage onBack={() => window.history.back()} /> : <Navigate to="/login" replace/>} />
-          <Route path="/profile" element={isAuthenticated ? <ProfilePage onBack={() => window.history.back()} /> : <Navigate to="/login" replace/>} />
-        </Routes>
-      </main>
+      <Routes>
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="/" element={<Protected el={<MainPage />} />} />
+        <Route path="/new" element={<Protected el={<NewTaskPage />} />} />
+        <Route path="/analytics" element={<Protected el={<AnalyticsPage />} />} />
+        <Route path="/admin" element={<Protected el={<AdminPage />} />} />
+        <Route path="/chat" element={<Protected el={<ChatPage />} />} />
+        <Route path="/profile" element={<Protected el={<ProfilePage />} />} />
+      </Routes>
     </BrowserRouter>
   );
 }
-
-

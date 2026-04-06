@@ -1,347 +1,261 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from './config';
-import TaskModal from './TaskModal';
 import BugsModal from './BugsModal';
 import BugDetailEditor from './BugDetailEditor';
 
-function Dashboard() {
-    const navigate = useNavigate();
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isEditorOpen, setIsEditorOpen] = useState(false);
-    const [selectedTask, setSelectedTask] = useState<any>(null);
-    const [selectedBugId, setSelectedBugId] = useState<string | undefined>();
-    const [tasks, setTasks] = useState<any[]>([]);
-    const [orgs, setOrgs] = useState<any[]>([]);
-    const [projects, setProjects] = useState<any[]>([]);
-    const [selectedOrgId, setSelectedOrgId] = useState<number>(() => Number(localStorage.getItem('selectedOrgId') || '0'));
-    const [selectedProjectId, setSelectedProjectId] = useState<number>(() => Number(localStorage.getItem('selectedProjectId') || '0'));
-    const [isLoading, setIsLoading] = useState(true);
-    const currentUserId = Number(localStorage.getItem('userId') || '0');
-    const jwtToken = localStorage.getItem('jwtToken') || '';
-    const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
+const P = '#7C5CBF';
 
-    const fetchOrgs = async () => {
-        try {
-            const res = await fetch(`${API_URL}/orgs`, { headers: authHeaders });
-            const data = await res.json();
-            const list = Array.isArray(data) ? data : [];
-            setOrgs(list);
-            const stored = Number(localStorage.getItem('selectedOrgId') || '0');
-            const firstId = list[0]?.id || 0;
-            const nextOrg = stored && list.some((o: any) => o.id === stored) ? stored : firstId;
-            if (nextOrg && nextOrg !== selectedOrgId) {
-                setSelectedOrgId(nextOrg);
-                localStorage.setItem('selectedOrgId', String(nextOrg));
-            }
-            const role = list.find((o: any) => o.id === (nextOrg || selectedOrgId))?.role;
-            if (role) localStorage.setItem('selectedOrgRole', String(role));
-        } catch (e) {
-            console.error('Fetch orgs error', e);
-        }
-    };
-
-    const fetchProjects = async (orgId: number) => {
-        if (!orgId) return;
-        try {
-            const res = await fetch(`${API_URL}/projects?org_id=${orgId}`, { headers: authHeaders });
-            const data = await res.json();
-            const list = Array.isArray(data) ? data : [];
-            setProjects(list);
-            const stored = Number(localStorage.getItem('selectedProjectId') || '0');
-            const firstId = list[0]?.id || 0;
-            const nextProject = stored && list.some((p: any) => p.id === stored) ? stored : firstId;
-            if (nextProject && nextProject !== selectedProjectId) {
-                setSelectedProjectId(nextProject);
-                localStorage.setItem('selectedProjectId', String(nextProject));
-            }
-        } catch (e) {
-            console.error('Fetch projects error', e);
-        }
-    };
-
-    const fetchTasks = async () => {
-        setIsLoading(true);
-        try {
-            if (!selectedProjectId) {
-                setTasks([]);
-                return;
-            }
-            const response = await fetch(`${API_URL}/tasks?project_id=${selectedProjectId}`, {
-                headers: authHeaders,
-            });
-            const data = await response.json();
-            setTasks(data || []);
-        } catch (err) { console.error("Fetch tasks error:", err); }
-        finally { setIsLoading(false); }
-    };
-
-    useEffect(() => { fetchOrgs(); }, []);
-    useEffect(() => { if (selectedOrgId) fetchProjects(selectedOrgId); }, [selectedOrgId]);
-    useEffect(() => { fetchTasks(); }, [selectedProjectId]);
-
-    const handleDeleteTask = async (taskId: number) => {
-        if (!taskId || !currentUserId) return;
-        if (!confirm('Удалить задачу?')) return;
-        try {
-            const res = await fetch(`${API_URL}/tasks/${taskId}`, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json', ...authHeaders },
-                body: JSON.stringify({ owner_id: currentUserId }),
-            });
-            if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
-            if (selectedTask?.id === taskId) {
-                setSelectedTask(null);
-                setIsEditorOpen(false);
-                setSelectedBugId(undefined);
-            }
-            await fetchTasks();
-        } catch (err: any) {
-            alert('Не удалось удалить задачу');
-        }
-    };
-
-    const handleBugSavedInState = (updatedBugs: any[]) => {
-        setTasks(prev => prev.map(t =>
-            t.id === selectedTask?.id ? { ...t, bugs: updatedBugs } : t
-        ));
-    };
-
-    const handleCreateTask = async (data: { name: string; desc: string }) => {
-        try {
-            const userId = localStorage.getItem('userId');
-            if (!userId) return alert("Ошибка: Авторизуйтесь снова");
-            if (!selectedProjectId) return alert("Выберите проект");
-            const response = await fetch(`${API_URL}/tasks`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', ...authHeaders },
-                body: JSON.stringify({ title: data.name, description: data.desc, project_id: selectedProjectId }),
-            });
-            if (!response.ok) throw new Error('Не удалось создать задачу');
-            await fetchTasks();
-            setIsModalOpen(false);
-        } catch (err: any) { alert(err.message); }
-    };
-
-    const colors = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
-    const getColor = (id: number) => colors[id % colors.length];
-
-    const userRole = localStorage.getItem('userRole') || 'qa';
-    const canViewAnalytics = userRole === 'pm' || userRole === 'admin';
-
-    if (!isLoading && orgs.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center py-32 px-4 text-center">
-                <div className="text-6xl mb-5">🏢</div>
-                <h2 className="text-2xl font-black text-slate-900 mb-2">Добро пожаловать!</h2>
-                <p className="text-slate-500 mb-6 max-w-xs">
-                    Чтобы начать работу, создайте первую организацию и проект.
-                </p>
-                <button
-                    onClick={() => navigate('/admin')}
-                    className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all"
-                >
-                    Создать организацию
-                </button>
-            </div>
-        );
-    }
-
-    return (
-        <div className="p-4 sm:p-8 w-full max-w-4xl mx-auto">
-            <div className="flex justify-between items-center mb-8">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Задачи</h1>
-                    <p className="text-sm text-gray-400 mt-0.5">{tasks.length} активных задач</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => navigate('/chat')}
-                        className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all text-sm"
-                    >
-                        Чаты
-                    </button>
-                    <select
-                        value={selectedOrgId || ''}
-                        onChange={(e) => {
-                            const v = Number(e.target.value);
-                            setSelectedOrgId(v);
-                            setSelectedProjectId(0);
-                            localStorage.setItem('selectedOrgId', String(v));
-                            localStorage.removeItem('selectedProjectId');
-                        }}
-                        className="bg-white border border-slate-200 text-slate-700 px-3 py-2.5 rounded-xl text-sm font-semibold"
-                    >
-                        {orgs.map((o: any) => (
-                            <option key={o.id} value={o.id}>{o.name}</option>
-                        ))}
-                    </select>
-                    <select
-                        value={selectedProjectId || ''}
-                        onChange={(e) => {
-                            const v = Number(e.target.value);
-                            setSelectedProjectId(v);
-                            localStorage.setItem('selectedProjectId', String(v));
-                        }}
-                        className="bg-white border border-slate-200 text-slate-700 px-3 py-2.5 rounded-xl text-sm font-semibold"
-                        disabled={!selectedOrgId}
-                    >
-                        {projects.map((p: any) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                    </select>
-                    {canViewAnalytics && (
-                        <button
-                            onClick={() => navigate('/analytics')}
-                            className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-semibold hover:bg-slate-50 transition-all text-sm"
-                        >
-                            Аналитика
-                        </button>
-                    )}
-                    <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition-all text-sm"
-                    >
-                        <span className="text-lg leading-none">+</span> Создать задачу
-                    </button>
-                </div>
-            </div>
-
-            {isLoading ? (
-                <div className="flex justify-center py-20">
-                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-indigo-600 border-t-transparent"></div>
-                </div>
-            ) : tasks.length === 0 ? (
-                <div className="text-center py-24">
-                    <div className="text-6xl mb-4">📋</div>
-                    <p className="text-lg font-medium text-gray-400">Задач пока нет</p>
-                    <p className="text-sm text-gray-300 mt-1">Нажмите «Создать задачу», чтобы начать</p>
-                </div>
-            ) : (
-                <div className="grid gap-3">
-                    {tasks.map(task => (
-                        <div
-                            key={task.id}
-                            onClick={() => setSelectedTask(task)}
-                            className="group flex items-center bg-white rounded-2xl border border-gray-100 hover:border-indigo-200 hover:shadow-lg hover:shadow-indigo-50 cursor-pointer transition-all duration-200 overflow-hidden"
-                        >
-                            <div className="w-1 self-stretch shrink-0" style={{ backgroundColor: getColor(task.id) }} />
-                            <div className="flex items-center gap-4 flex-1 px-5 py-4 min-w-0">
-                                <span className="text-xs font-bold px-2.5 py-1 rounded-lg text-white shrink-0" style={{ backgroundColor: getColor(task.id) }}>
-                                    #{task.id}
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-gray-900 truncate">{task.title}</p>
-                                    <p className="text-sm text-gray-400 truncate mt-0.5">{task.description || 'Без описания'}</p>
-                                </div>
-                                {task.owner_id === currentUserId && (
-                                    <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); handleDeleteTask(task.id); }}
-                                        className="shrink-0 opacity-0 group-hover:opacity-100 text-xs font-semibold text-red-500 bg-red-50 border border-red-100 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-all"
-                                    >
-                                        Удалить
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
-            <TaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onCreate={handleCreateTask} />
-
-            {selectedTask && !isEditorOpen && (
-                <BugsModal
-                    task={tasks.find(t => t.id === selectedTask.id) || selectedTask}
-                    onClose={() => setSelectedTask(null)}
-                    setIsEditorOpen={setIsEditorOpen}
-                    setSelectedBugId={setSelectedBugId}
-                    onBugsLoaded={handleBugSavedInState}
-                />
-            )}
-
-            {isEditorOpen && selectedTask && (
-                <BugDetailEditor
-                    isOpen={isEditorOpen}
-                    onClose={() => { setIsEditorOpen(false); setSelectedBugId(undefined); }}
-                    task={tasks.find(t => t.id === selectedTask.id) || selectedTask}
-                    currentBug={tasks.find(t => t.id === selectedTask.id)?.bugs?.find((b: any) => b.id === Number(selectedBugId))}
-                    bugId={selectedBugId}
-                    onBugSaved={handleBugSavedInState}
-                />
-            )}
-        </div>
-    );
+function formatDate(dateStr?: string) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return 'Сегодня';
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 }
 
-function Header() {
-    const [isOpen, setIsOpen] = useState(false);
-    const navigate = useNavigate();
-    const userEmail = localStorage.getItem('userEmail') || 'Guest';
-    const initials = userEmail.slice(0, 2).toUpperCase();
-    const handleLogout = () => { localStorage.clear(); navigate('/login'); window.location.reload(); };
-
-    return (
-        <header className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-gray-100 w-full">
-            <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center">
-                    <span className="text-white text-xs font-black">B</span>
-                </div>
-                <span className="font-bold text-gray-900 tracking-tight">BugTracker</span>
-            </div>
-            <div className="relative">
-                <button
-                    onClick={() => setIsOpen(!isOpen)}
-                    className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 font-bold text-xs flex items-center justify-center border border-indigo-100 hover:bg-indigo-100 transition-colors"
-                >
-                    {initials}
-                </button>
-                {isOpen && (
-                    <div className="absolute right-0 mt-2 w-52 bg-white border border-gray-100 rounded-xl shadow-xl py-1 z-50">
-                        <div className="px-4 py-2.5 text-xs text-gray-400 border-b border-gray-50 truncate">{userEmail}</div>
-                        <button
-                            onClick={() => { setIsOpen(false); navigate('/admin'); }}
-                            className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
-                        >
-                            Управление
-                        </button>
-                        <button
-                            onClick={() => { setIsOpen(false); navigate('/profile'); }}
-                            className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 font-medium transition-colors"
-                        >
-                            Профиль
-                        </button>
-                        <button onClick={handleLogout} className="w-full text-left px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 font-medium transition-colors">
-                            Выйти
-                        </button>
-                    </div>
-                )}
-            </div>
-        </header>
-    );
+function ChevronRight() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6"/>
+    </svg>
+  );
 }
 
-function Sidebar() {
-    return (
-        <aside className="hidden sm:block w-56 bg-gray-50 border-r border-gray-100 p-4">
-            <button className="flex items-center gap-3 w-full px-3 py-2.5 bg-white rounded-xl shadow-sm text-indigo-600 font-semibold text-sm border border-indigo-50">
-                <span>📋</span> Мои задачи
-            </button>
-        </aside>
-    );
+function SearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+  );
+}
+
+function OrgIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  );
 }
 
 export default function MainPage() {
+  const navigate = useNavigate();
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<any>(null);
+  const [selectedBugId, setSelectedBugId] = useState<string | undefined>();
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [orgs, setOrgs] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<number>(() => Number(localStorage.getItem('selectedOrgId') || '0'));
+  const [selectedProjectId, setSelectedProjectId] = useState<number>(() => Number(localStorage.getItem('selectedProjectId') || '0'));
+  const [isLoading, setIsLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const currentUserId = Number(localStorage.getItem('userId') || '0');
+  const jwtToken = localStorage.getItem('jwtToken') || '';
+  const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
+
+  const fetchOrgs = async () => {
+    try {
+      const res = await fetch(`${API_URL}/orgs`, { headers: authHeaders });
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setOrgs(list);
+      const stored = Number(localStorage.getItem('selectedOrgId') || '0');
+      const firstId = list[0]?.id || 0;
+      const nextOrg = stored && list.some((o: any) => o.id === stored) ? stored : firstId;
+      if (nextOrg && nextOrg !== selectedOrgId) {
+        setSelectedOrgId(nextOrg);
+        localStorage.setItem('selectedOrgId', String(nextOrg));
+      }
+      const role = list.find((o: any) => o.id === (nextOrg || selectedOrgId))?.role;
+      if (role) localStorage.setItem('selectedOrgRole', String(role));
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchProjects = async (orgId: number) => {
+    if (!orgId) return;
+    try {
+      const res = await fetch(`${API_URL}/projects?org_id=${orgId}`, { headers: authHeaders });
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setProjects(list);
+      const stored = Number(localStorage.getItem('selectedProjectId') || '0');
+      const firstId = list[0]?.id || 0;
+      const nextProject = stored && list.some((p: any) => p.id === stored) ? stored : firstId;
+      if (nextProject && nextProject !== selectedProjectId) {
+        setSelectedProjectId(nextProject);
+        localStorage.setItem('selectedProjectId', String(nextProject));
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const fetchTasks = async () => {
+    setIsLoading(true);
+    try {
+      if (!selectedProjectId) { setTasks([]); return; }
+      const res = await fetch(`${API_URL}/tasks?project_id=${selectedProjectId}`, { headers: authHeaders });
+      const data = await res.json();
+      setTasks(data || []);
+    } catch (err) { console.error(err); }
+    finally { setIsLoading(false); }
+  };
+
+  useEffect(() => { fetchOrgs(); }, []);
+  useEffect(() => { if (selectedOrgId) fetchProjects(selectedOrgId); }, [selectedOrgId]);
+  useEffect(() => { fetchTasks(); }, [selectedProjectId]);
+
+  const handleDeleteTask = async (taskId: number) => {
+    if (!taskId || !currentUserId) return;
+    if (!confirm('Удалить задачу?')) return;
+    try {
+      const res = await fetch(`${API_URL}/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ owner_id: currentUserId }),
+      });
+      if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+      if (selectedTask?.id === taskId) { setSelectedTask(null); setIsEditorOpen(false); setSelectedBugId(undefined); }
+      await fetchTasks();
+    } catch { alert('Не удалось удалить задачу'); }
+  };
+
+  const handleBugSavedInState = (updatedBugs: any[]) => {
+    setTasks(prev => prev.map(t => t.id === selectedTask?.id ? { ...t, bugs: updatedBugs } : t));
+  };
+
+  if (!isLoading && orgs.length === 0) {
     return (
-        <div className="flex flex-col h-screen bg-gray-50">
-            <Header />
-            <div className="flex flex-1 overflow-hidden">
-                <Sidebar />
-                <main className="flex-1 bg-gray-50 overflow-y-auto">
-                    <Dashboard />
-                </main>
-            </div>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full py-32 px-4 text-center">
+        <div className="text-6xl mb-5">🏢</div>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">Добро пожаловать!</h2>
+        <p className="text-gray-400 mb-6 max-w-xs text-sm">Создайте первую организацию и проект, чтобы начать работу.</p>
+        <button
+          onClick={() => navigate('/admin')}
+          className="text-white px-6 py-3 rounded-xl font-semibold text-sm"
+          style={{ background: P }}
+        >
+          Создать организацию
+        </button>
+      </div>
     );
+  }
+
+  const visible = tasks.filter(t =>
+    !search || t.title?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-xl font-bold text-gray-900 text-center mb-5">Мои задачи</h1>
+
+      {/* Search */}
+      <div className="relative mb-4">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+          <SearchIcon />
+        </span>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Поиск..."
+          className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm text-gray-700 outline-none focus:border-[#7C5CBF]"
+        />
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-3 mb-5">
+        <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-3 py-2 flex-1">
+          <span className="text-gray-400 shrink-0"><OrgIcon /></span>
+          <select
+            value={selectedOrgId || ''}
+            onChange={e => {
+              const v = Number(e.target.value);
+              setSelectedOrgId(v);
+              setSelectedProjectId(0);
+              localStorage.setItem('selectedOrgId', String(v));
+              localStorage.removeItem('selectedProjectId');
+            }}
+            className="flex-1 text-sm text-gray-700 bg-transparent outline-none"
+          >
+            <option value="">Выберите организацию</option>
+            {orgs.map((o: any) => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-xl px-3 py-2 flex-1">
+          <select
+            value={selectedProjectId || ''}
+            onChange={e => {
+              const v = Number(e.target.value);
+              setSelectedProjectId(v);
+              localStorage.setItem('selectedProjectId', String(v));
+            }}
+            className="flex-1 text-sm text-gray-700 bg-transparent outline-none"
+            disabled={!selectedOrgId}
+          >
+            <option value="">Выберите проект</option>
+            {projects.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Task list */}
+      {isLoading ? (
+        <div className="flex justify-center py-20">
+          <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: `${P} transparent ${P} ${P}` }} />
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="text-center py-20">
+          <p className="text-gray-400 text-sm">{tasks.length > 0 ? 'Ничего не найдено' : 'Задач пока нет'}</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {visible.map(task => (
+            <div
+              key={task.id}
+              onClick={() => setSelectedTask(task)}
+              className="group flex items-center gap-3 bg-white rounded-xl border border-gray-100 px-4 py-3 cursor-pointer hover:border-[#C4B0E8] hover:shadow-sm transition-all"
+            >
+              <span className="text-gray-200 select-none text-xs leading-none">⠿⠿</span>
+              <span className="flex-1 text-sm font-medium text-gray-800 truncate">{task.title}</span>
+              <span className="text-xs text-gray-400 shrink-0">Тип: задача</span>
+              <span className="text-xs text-gray-400 shrink-0">Изменено: {formatDate(task.updated_at || task.created_at)}</span>
+              {task.owner_id === currentUserId && (
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); handleDeleteTask(task.id); }}
+                  className="opacity-0 group-hover:opacity-100 text-xs text-red-400 hover:text-red-600 transition-all shrink-0"
+                >
+                  ✕
+                </button>
+              )}
+              <span className="text-gray-300 shrink-0"><ChevronRight /></span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {selectedTask && !isEditorOpen && (
+        <BugsModal
+          task={tasks.find(t => t.id === selectedTask.id) || selectedTask}
+          onClose={() => setSelectedTask(null)}
+          setIsEditorOpen={setIsEditorOpen}
+          setSelectedBugId={setSelectedBugId}
+          onBugsLoaded={handleBugSavedInState}
+        />
+      )}
+
+      {isEditorOpen && selectedTask && (
+        <BugDetailEditor
+          isOpen={isEditorOpen}
+          onClose={() => { setIsEditorOpen(false); setSelectedBugId(undefined); }}
+          task={tasks.find(t => t.id === selectedTask.id) || selectedTask}
+          currentBug={tasks.find(t => t.id === selectedTask.id)?.bugs?.find((b: any) => b.id === Number(selectedBugId))}
+          bugId={selectedBugId}
+          onBugSaved={handleBugSavedInState}
+        />
+      )}
+    </div>
+  );
 }

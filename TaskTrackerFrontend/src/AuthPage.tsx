@@ -79,7 +79,7 @@ export default function AuthPage() {
             Или{' '}
             <button
               onClick={switchMode}
-              className="font-medium text-blue-600 hover:text-blue-500 underline"
+              className="font-medium text-[#7C5CBF] hover:text-[#6548A8] underline"
             >
               {isLogin ? 'зарегистрироваться' : 'войти в существующий'}
             </button>
@@ -134,7 +134,8 @@ export default function AuthPage() {
           <button
             type="submit"
             disabled={pending}
-            className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+            className="w-full flex justify-center py-3 px-4 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition-opacity"
+            style={{ background: '#7C5CBF' }}
           >
             {pending ? 'Загрузка...' : (isLogin ? 'Войти' : 'Зарегистрироваться')}
           </button>
