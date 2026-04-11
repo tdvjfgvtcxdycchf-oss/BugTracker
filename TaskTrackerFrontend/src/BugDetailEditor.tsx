@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_URL } from './config';
+import { apiFetch } from './api';
 
 interface Bug {
   id?: number;
@@ -61,8 +62,6 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const currentUserEmail = localStorage.getItem('userEmail') || 'Guest';
   const currentUserId = Number(localStorage.getItem('userId') || '0');
   const currentUserRole = localStorage.getItem('userRole') || 'qa';
-  const jwtToken = localStorage.getItem('jwtToken') || '';
-  const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
   const [lifecyclePending, setLifecyclePending] = useState(false);
 
   // Comments
@@ -144,7 +143,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
       try {
         const results = await Promise.all(
           ids.map(async (id) => {
-            const res = await fetch(`${API_URL}/users/${id}`, { headers: authHeaders });
+            const res = await apiFetch(`${API_URL}/users/${id}`);
             const emails = (await res.json()) as string[];
             return { id, emails };
           })
@@ -211,7 +210,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
       let cancelled = false;
       (async () => {
         try {
-          const res = await fetch(`${API_URL}/bugs/${id}/photo?t=${Date.now()}`, { headers: authHeaders });
+          const res = await apiFetch(`${API_URL}/bugs/${id}/photo?t=${Date.now()}`);
           if (!res.ok) return;
           const blob = await res.blob();
           const url = URL.createObjectURL(blob);
@@ -254,9 +253,9 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     (async () => {
       try {
         const [cRes, aRes, rRes] = await Promise.all([
-          fetch(`${API_URL}/bugs/${id}/comments`, { headers: authHeaders }),
-          fetch(`${API_URL}/bugs/${id}/audit`, { headers: authHeaders }),
-          fetch(`${API_URL}/bugs/${id}/relations`, { headers: authHeaders }),
+          apiFetch(`${API_URL}/bugs/${id}/comments`),
+          apiFetch(`${API_URL}/bugs/${id}/audit`),
+          apiFetch(`${API_URL}/bugs/${id}/relations`),
         ]);
         const cData = await cRes.json().catch(() => []);
         const aData = await aRes.json().catch(() => []);
@@ -278,9 +277,9 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     if (!id) return;
     setRelPending(true);
     try {
-      const res = await fetch(`${API_URL}/bugs/${id}/relations`, {
+      const res = await apiFetch(`${API_URL}/bugs/${id}/relations`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to_bug_id: toId, relation_type: newRelType }),
       });
       if (res.ok) {
@@ -294,7 +293,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
   const handleDeleteRelation = async (relId: number) => {
     try {
-      const res = await fetch(`${API_URL}/relations/${relId}`, { method: 'DELETE', headers: authHeaders });
+      const res = await apiFetch(`${API_URL}/relations/${relId}`, { method: 'DELETE' });
       if (res.ok) setRelations(prev => prev.filter(r => r.id_pk !== relId));
     } catch (err) { console.error(err); }
   };
@@ -306,9 +305,9 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     if (!id) return;
     setCommentPending(true);
     try {
-      const res = await fetch(`${API_URL}/bugs/${id}/comments`, {
+      const res = await apiFetch(`${API_URL}/bugs/${id}/comments`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: trimmed }),
       });
       if (res.ok) {
@@ -345,7 +344,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   };
 
   const refreshBugs = async () => {
-    const res = await fetch(`${API_URL}/bugs/${task.id}`, { headers: authHeaders });
+    const res = await apiFetch(`${API_URL}/bugs/${task.id}`);
     const updatedBugs = await res.json().catch(() => []);
     onBugSaved(updatedBugs);
   };
@@ -378,22 +377,22 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
         ? `${API_URL}/bugs/${getBugId()}`
         : `${API_URL}/bugs/${task?.id}`;
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: isEditing ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
       if (res.ok) {
         await refreshBugs();
         if (pendingPhotoFile) {
-          const bugsRes = await fetch(`${API_URL}/bugs/${task.id}`, { headers: authHeaders });
+          const bugsRes = await apiFetch(`${API_URL}/bugs/${task.id}`);
           const bugs = await bugsRes.json().catch(() => []);
           const targetId = isEditing ? getBugId() : Math.max(...bugs.map((b: any) => b.id));
           if (targetId) {
             const form = new FormData();
             form.append('photo', pendingPhotoFile);
-            await fetch(`${API_URL}/bugs/${targetId}/photo`, { method: 'POST', headers: authHeaders, body: form });
+            await apiFetch(`${API_URL}/bugs/${targetId}/photo`, { method: 'POST', body: form });
             setPendingPhotoFile(null);
           }
         }
@@ -422,9 +421,9 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
         accepted_by: getAcceptedById() ?? null,
         accepted_time: acceptedTime ?? null,
       };
-      const res = await fetch(`${API_URL}/bugs/${bugPk}`, {
+      const res = await apiFetch(`${API_URL}/bugs/${bugPk}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (res.ok) { setStatus(newStatus); await refreshBugs(); }
@@ -455,9 +454,9 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
         accepted_time: type === 'accept' ? nowIso : (acceptedTime ?? null),
       };
 
-      const res = await fetch(`${API_URL}/bugs/${bugPk}`, {
+      const res = await apiFetch(`${API_URL}/bugs/${bugPk}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 

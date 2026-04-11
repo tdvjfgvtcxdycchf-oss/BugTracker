@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from './config';
+import { apiFetch } from './api';
 
 const P = '#7C5CBF';
 
@@ -15,9 +16,6 @@ function PencilIcon() {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const jwtToken = localStorage.getItem('jwtToken') || '';
-  const authHeaders = useMemo(() => (jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}), [jwtToken]);
-
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,7 +35,7 @@ export default function ProfilePage() {
   const initial = email.slice(0, 1).toUpperCase();
 
   const fetchMe = async () => {
-    const res = await fetch(`${API_URL}/me`, { headers: authHeaders });
+    const res = await apiFetch(`${API_URL}/me`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return;
     setEmail(data.email || '');
@@ -46,7 +44,7 @@ export default function ProfilePage() {
   };
 
   const fetchOrgs = async () => {
-    const res = await fetch(`${API_URL}/orgs`, { headers: authHeaders });
+    const res = await apiFetch(`${API_URL}/orgs`);
     const data = await res.json().catch(() => []);
     setOrgs(Array.isArray(data) ? data : []);
   };
@@ -54,7 +52,7 @@ export default function ProfilePage() {
   const fetchProjects = async () => {
     const orgId = localStorage.getItem('selectedOrgId');
     if (!orgId) return;
-    const res = await fetch(`${API_URL}/projects?org_id=${orgId}`, { headers: authHeaders });
+    const res = await apiFetch(`${API_URL}/projects?org_id=${orgId}`);
     const data = await res.json().catch(() => []);
     setProjects(Array.isArray(data) ? data : []);
   };
@@ -68,9 +66,9 @@ export default function ProfilePage() {
   const changeEmail = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/me/email`, {
+      const res = await apiFetch(`${API_URL}/me/email`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_email: newEmail.trim(), current_password: emailPass }),
       });
       const data = await res.json().catch(() => ({}));
@@ -86,9 +84,9 @@ export default function ProfilePage() {
   const changePassword = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/me/password`, {
+      const res = await apiFetch(`${API_URL}/me/password`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ current_password: currentPass, new_password: newPass }),
       });
       const data = await res.json().catch(() => ({}));

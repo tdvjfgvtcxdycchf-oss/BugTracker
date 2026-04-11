@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from './config';
+import { apiFetch } from './api';
 
 const P = '#7C5CBF';
 
@@ -11,8 +12,6 @@ export default function NewTaskPage() {
   const [desc, setDesc] = useState('');
   const [pending, setPending] = useState(false);
 
-  const jwtToken = localStorage.getItem('jwtToken') || '';
-  const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
   const selectedProjectId = Number(localStorage.getItem('selectedProjectId') || '0');
 
   const handleCreate = async () => {
@@ -23,9 +22,9 @@ export default function NewTaskPage() {
     }
     setPending(true);
     try {
-      const res = await fetch(`${API_URL}/tasks`, {
+      const res = await apiFetch(`${API_URL}/tasks`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: taskTitle, description: desc.trim(), project_id: selectedProjectId }),
       });
       if (!res.ok) throw new Error('Не удалось создать задачу');

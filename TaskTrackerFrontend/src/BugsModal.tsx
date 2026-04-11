@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { API_URL } from './config';
+import { apiFetch } from './api';
 
 interface BugsModalProps {
   task: any;
@@ -13,8 +14,6 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
   const [bugs, setBugs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const currentUserId = Number(localStorage.getItem('userId') || '0');
-  const jwtToken = localStorage.getItem('jwtToken') || '';
-  const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
   const [pendingDeleteBugId, setPendingDeleteBugId] = useState<number | null>(null);
 
   const [filterStatus, setFilterStatus] = useState('');
@@ -26,9 +25,7 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
     if (!task?.id) return;
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/bugs/${task.id}`, {
-        headers: authHeaders,
-      });
+      const response = await apiFetch(`${API_URL}/bugs/${task.id}`);
       const data = await response.json();
       const loadedBugs = data || [];
       setBugs(loadedBugs);
@@ -47,10 +44,7 @@ export default function BugsModal({ task, onClose, setIsEditorOpen, setSelectedB
 
     setPendingDeleteBugId(bugId);
     try {
-      const res = await fetch(`${API_URL}/bugs/${bugId}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-      });
+      const res = await apiFetch(`${API_URL}/bugs/${bugId}`, { method: 'DELETE' });
 
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
       await fetchBugs();

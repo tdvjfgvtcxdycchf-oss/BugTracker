@@ -2,18 +2,10 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from './config';
 
-const ROLES = [
-  { value: 'qa', label: 'QA Engineer (тестировщик)' },
-  { value: 'developer', label: 'Developer (разработчик)' },
-  { value: 'pm', label: 'Project Manager' },
-  { value: 'admin', label: 'Admin' },
-];
-
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('qa');
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const navigate = useNavigate();
@@ -34,7 +26,7 @@ export default function AuthPage() {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(isLogin ? { email, password } : { email, password, role }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();
@@ -110,20 +102,6 @@ export default function AuthPage() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            {!isLogin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Роль</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="appearance-none relative block w-full px-3 py-3 border border-gray-300 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                >
-                  {ROLES.map(r => (
-                    <option key={r.value} value={r.value}>{r.label}</option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
 
           {formError && (

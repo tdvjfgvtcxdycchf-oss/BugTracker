@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from './config';
+import { apiFetch } from './api';
 import BugsModal from './BugsModal';
 import BugDetailEditor from './BugDetailEditor';
 
@@ -54,12 +55,9 @@ export default function MainPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const currentUserId = Number(localStorage.getItem('userId') || '0');
-  const jwtToken = localStorage.getItem('jwtToken') || '';
-  const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
-
   const fetchOrgs = async () => {
     try {
-      const res = await fetch(`${API_URL}/orgs`, { headers: authHeaders });
+      const res = await apiFetch(`${API_URL}/orgs`);
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
       setOrgs(list);
@@ -78,7 +76,7 @@ export default function MainPage() {
   const fetchProjects = async (orgId: number) => {
     if (!orgId) return;
     try {
-      const res = await fetch(`${API_URL}/projects?org_id=${orgId}`, { headers: authHeaders });
+      const res = await apiFetch(`${API_URL}/projects?org_id=${orgId}`);
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
       setProjects(list);
@@ -96,7 +94,7 @@ export default function MainPage() {
     setIsLoading(true);
     try {
       if (!selectedProjectId) { setTasks([]); return; }
-      const res = await fetch(`${API_URL}/tasks?project_id=${selectedProjectId}`, { headers: authHeaders });
+      const res = await apiFetch(`${API_URL}/tasks?project_id=${selectedProjectId}`);
       const data = await res.json();
       setTasks(data || []);
     } catch (err) { console.error(err); }
@@ -111,9 +109,9 @@ export default function MainPage() {
     if (!taskId || !currentUserId) return;
     if (!confirm('Удалить задачу?')) return;
     try {
-      const res = await fetch(`${API_URL}/tasks/${taskId}`, {
+      const res = await apiFetch(`${API_URL}/tasks/${taskId}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ owner_id: currentUserId }),
       });
       if (!res.ok) throw new Error(`Delete failed: ${res.status}`);

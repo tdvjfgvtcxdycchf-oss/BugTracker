@@ -47,13 +47,6 @@ function IconGear() {
   );
 }
 
-function IconMenu() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-    </svg>
-  );
-}
 
 const NAV = [
   { path: '/new', label: 'Новая задача', Icon: IconPencil },
@@ -108,11 +101,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Header */}
         <header className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-100 shrink-0 h-14">
-          <div className="flex items-center gap-3">
-            <span className="text-gray-400"><IconMenu /></span>
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-gray-900 text-[15px]">🐛 BugTracker</span>
-            </div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-gray-900 text-[15px]">🐛 BugTracker</span>
           </div>
           <button onClick={() => navigate('/profile')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <div

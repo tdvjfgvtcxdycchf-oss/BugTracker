@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { API_URL } from './config';
+import { apiFetch } from './api';
 
 const P = '#7C5CBF';
 
@@ -18,9 +19,6 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AnalyticsPage() {
-  const jwtToken = localStorage.getItem('jwtToken') || '';
-  const authHeaders = jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {};
-
   const [stats, setStats] = useState<StatItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [orgs, setOrgs] = useState<any[]>([]);
@@ -29,19 +27,19 @@ export default function AnalyticsPage() {
   const [selectedProjectId, setSelectedProjectId] = useState(() => Number(localStorage.getItem('selectedProjectId') || '0'));
 
   useEffect(() => {
-    fetch(`${API_URL}/orgs`, { headers: authHeaders })
+    apiFetch(`${API_URL}/orgs`)
       .then(r => r.json()).then(d => setOrgs(Array.isArray(d) ? d : [])).catch(() => {});
   }, []);
 
   useEffect(() => {
     if (!selectedOrgId) return;
-    fetch(`${API_URL}/projects?org_id=${selectedOrgId}`, { headers: authHeaders })
+    apiFetch(`${API_URL}/projects?org_id=${selectedOrgId}`)
       .then(r => r.json()).then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => {});
   }, [selectedOrgId]);
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API_URL}/stats`, { headers: authHeaders })
+    apiFetch(`${API_URL}/stats`)
       .then(r => r.json())
       .then(d => setStats(Array.isArray(d) ? d : []))
       .catch(() => {})

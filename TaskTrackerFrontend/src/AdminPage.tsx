@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { API_URL } from './config';
+import { apiFetch } from './api';
 
 const P = '#7C5CBF';
 
@@ -18,9 +19,6 @@ function Panel({ title, children }: { title: string; children: any }) {
 }
 
 export default function AdminPage() {
-  const jwtToken = localStorage.getItem('jwtToken') || '';
-  const authHeaders = useMemo(() => (jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}), [jwtToken]);
-
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [orgMembers, setOrgMembers] = useState<OrgMember[]>([]);
@@ -45,7 +43,7 @@ export default function AdminPage() {
   const fetchOrgs = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/orgs`, { headers: authHeaders });
+      const res = await apiFetch(`${API_URL}/orgs`);
       const data = await res.json().catch(() => []);
       const orgsData: Org[] = Array.isArray(data) ? data : [];
       setOrgs(orgsData);
@@ -63,7 +61,7 @@ export default function AdminPage() {
     if (!orgId) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/projects?org_id=${orgId}`, { headers: authHeaders });
+      const res = await apiFetch(`${API_URL}/projects?org_id=${orgId}`);
       const data = await res.json().catch(() => []);
       const list: Project[] = Array.isArray(data) ? data : [];
       setProjects(list);
@@ -79,14 +77,14 @@ export default function AdminPage() {
 
   const fetchOrgMembers = async (orgId: number) => {
     if (!orgId || !isOrgAdmin) { setOrgMembers([]); return; }
-    const res = await fetch(`${API_URL}/orgs/${orgId}/members`, { headers: authHeaders });
+    const res = await apiFetch(`${API_URL}/orgs/${orgId}/members`);
     const data = await res.json().catch(() => []);
     setOrgMembers(Array.isArray(data) ? data : []);
   };
 
   const fetchProjectMembers = async (projectId: number) => {
     if (!projectId || !isOrgAdmin) { setProjectMembers([]); return; }
-    const res = await fetch(`${API_URL}/projects/${projectId}/members`, { headers: authHeaders });
+    const res = await apiFetch(`${API_URL}/projects/${projectId}/members`);
     const data = await res.json().catch(() => []);
     setProjectMembers(Array.isArray(data) ? data : []);
   };
@@ -101,7 +99,7 @@ export default function AdminPage() {
     if (!name) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/orgs`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders }, body: JSON.stringify({ name }) });
+      const res = await apiFetch(`${API_URL}/orgs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Ошибка');
       setNewOrgName('');
@@ -115,7 +113,7 @@ export default function AdminPage() {
     if (!name || !selectedOrgId) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/projects`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders }, body: JSON.stringify({ org_id: selectedOrgId, name }) });
+      const res = await apiFetch(`${API_URL}/projects`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ org_id: selectedOrgId, name }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Ошибка');
       setNewProjectName('');
@@ -131,7 +129,7 @@ export default function AdminPage() {
     setOrgMemberHint(null);
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/orgs/${selectedOrgId}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders }, body: JSON.stringify({ email, role: orgMemberRole }) });
+      const res = await apiFetch(`${API_URL}/orgs/${selectedOrgId}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, role: orgMemberRole }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Ошибка');
       setOrgMemberEmail('');
@@ -150,7 +148,7 @@ export default function AdminPage() {
     setProjectMemberHint(null);
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/projects/${selectedProjectId}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders }, body: JSON.stringify({ email, role: projectMemberRole }) });
+      const res = await apiFetch(`${API_URL}/projects/${selectedProjectId}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, role: projectMemberRole }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Ошибка');
       setProjectMemberEmail('');
@@ -164,25 +162,25 @@ export default function AdminPage() {
 
   const updateOrgMemberRole = async (userId: number, role: OrgMember['role']) => {
     if (!selectedOrgId) return;
-    await fetch(`${API_URL}/orgs/${selectedOrgId}/members/${userId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders }, body: JSON.stringify({ role }) });
+    await apiFetch(`${API_URL}/orgs/${selectedOrgId}/members/${userId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) });
     await fetchOrgMembers(selectedOrgId);
   };
 
   const deleteOrgMember = async (userId: number) => {
     if (!selectedOrgId || !confirm('Удалить участника?')) return;
-    await fetch(`${API_URL}/orgs/${selectedOrgId}/members/${userId}`, { method: 'DELETE', headers: authHeaders });
+    await apiFetch(`${API_URL}/orgs/${selectedOrgId}/members/${userId}`, { method: 'DELETE' });
     await fetchOrgMembers(selectedOrgId);
   };
 
   const updateProjectMemberRole = async (userId: number, role: ProjectMember['role']) => {
     if (!selectedProjectId) return;
-    await fetch(`${API_URL}/projects/${selectedProjectId}/members/${userId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders }, body: JSON.stringify({ role }) });
+    await apiFetch(`${API_URL}/projects/${selectedProjectId}/members/${userId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) });
     await fetchProjectMembers(selectedProjectId);
   };
 
   const deleteProjectMember = async (userId: number) => {
     if (!selectedProjectId || !confirm('Удалить участника?')) return;
-    await fetch(`${API_URL}/projects/${selectedProjectId}/members/${userId}`, { method: 'DELETE', headers: authHeaders });
+    await apiFetch(`${API_URL}/projects/${selectedProjectId}/members/${userId}`, { method: 'DELETE' });
     await fetchProjectMembers(selectedProjectId);
   };
 

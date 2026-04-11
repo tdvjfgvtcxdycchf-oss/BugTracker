@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { API_URL } from './config';
+import { apiFetch } from './api';
 
 const P = '#7C5CBF';
 const PL = '#EDE9F7';
@@ -34,8 +35,6 @@ function avatarColor(str: string) {
 }
 
 export default function ChatPage() {
-  const jwtToken = localStorage.getItem('jwtToken') || '';
-  const authHeaders = useMemo(() => (jwtToken ? { Authorization: `Bearer ${jwtToken}` } : {}), [jwtToken]);
   const currentUserId = Number(localStorage.getItem('userId') || '0');
   const selectedOrgId = Number(localStorage.getItem('selectedOrgId') || '0');
   const selectedProjectId = Number(localStorage.getItem('selectedProjectId') || '0');
@@ -74,7 +73,7 @@ export default function ChatPage() {
       let url = `${API_URL}/chat/threads?scope=${mode}`;
       if (mode === 'org') url += `&org_id=${selectedOrgId}`;
       if (mode === 'project') url += `&project_id=${selectedProjectId}`;
-      const res = await fetch(url, { headers: authHeaders });
+      const res = await apiFetch(url);
       const data = await res.json().catch(() => []);
       const list = Array.isArray(data) ? data : [];
       setThreads(list);
@@ -87,9 +86,9 @@ export default function ChatPage() {
   const ensureScopeThread = async () => {
     if (mode === 'dm') return;
     const payload = mode === 'org' ? { scope: 'org', org_id: selectedOrgId } : { scope: 'project', project_id: selectedProjectId };
-    const res = await fetch(`${API_URL}/chat/threads`, {
+    const res = await apiFetch(`${API_URL}/chat/threads`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
@@ -105,7 +104,7 @@ export default function ChatPage() {
       url.searchParams.set('limit', '40');
       if (beforeId) url.searchParams.set('before_id', String(beforeId));
     }
-    const res = await fetch(url.toString(), { headers: authHeaders });
+    const res = await apiFetch(url.toString());
     const data = await res.json().catch(() => []);
     const list = (Array.isArray(data) ? data : []) as Msg[];
     if (afterId) {
@@ -119,7 +118,7 @@ export default function ChatPage() {
 
   const markRead = async (threadId: number) => {
     if (!threadId) return;
-    await fetch(`${API_URL}/chat/threads/${threadId}/read`, { method: 'POST', headers: authHeaders });
+    await apiFetch(`${API_URL}/chat/threads/${threadId}/read`, { method: 'POST' });
   };
 
   useEffect(() => { loadThreads(); }, [mode]);
@@ -158,7 +157,7 @@ export default function ChatPage() {
     if (!activeThreadId) return;
     const id = window.setInterval(async () => {
       if (document.hidden) return;
-      const res = await fetch(`${API_URL}/chat/threads/${activeThreadId}/typing`, { headers: authHeaders });
+      const res = await apiFetch(`${API_URL}/chat/threads/${activeThreadId}/typing`);
       const data = await res.json().catch(() => []);
       setTypingUsers(Array.isArray(data) ? data : []);
     }, 1500);
@@ -167,9 +166,9 @@ export default function ChatPage() {
 
   const updateTyping = async (isTyping: boolean) => {
     if (!activeThreadId) return;
-    await fetch(`${API_URL}/chat/threads/${activeThreadId}/typing`, {
+    await apiFetch(`${API_URL}/chat/threads/${activeThreadId}/typing`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_typing: isTyping }),
     });
   };
@@ -196,9 +195,9 @@ export default function ChatPage() {
 
   const createDM = async () => {
     if (!dmEmail.trim()) return;
-    const res = await fetch(`${API_URL}/chat/threads`, {
+    const res = await apiFetch(`${API_URL}/chat/threads`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scope: 'dm', email: dmEmail.trim() }),
     });
     const data = await res.json().catch(() => ({}));
@@ -210,9 +209,9 @@ export default function ChatPage() {
 
   const sendMessage = async () => {
     if (!activeThreadId || !body.trim()) return;
-    const res = await fetch(`${API_URL}/chat/threads/${activeThreadId}/messages`, {
+    const res = await apiFetch(`${API_URL}/chat/threads/${activeThreadId}/messages`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: body.trim() }),
     });
     if (!res.ok) return;
@@ -224,9 +223,9 @@ export default function ChatPage() {
 
   const saveEdit = async () => {
     if (!editingMessageId || !editingBody.trim()) return;
-    const res = await fetch(`${API_URL}/chat/messages/${editingMessageId}`, {
+    const res = await apiFetch(`${API_URL}/chat/messages/${editingMessageId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ body: editingBody.trim() }),
     });
     if (!res.ok) return;
@@ -236,7 +235,7 @@ export default function ChatPage() {
 
   const deleteMessage = async (id: number) => {
     if (!confirm('Удалить сообщение?')) return;
-    const res = await fetch(`${API_URL}/chat/messages/${id}`, { method: 'DELETE', headers: authHeaders });
+    const res = await apiFetch(`${API_URL}/chat/messages/${id}`, { method: 'DELETE' });
     if (!res.ok) return;
     await loadMessages();
   };
