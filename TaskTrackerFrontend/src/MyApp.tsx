@@ -7,6 +7,7 @@ import AdminPage from './AdminPage';
 import ChatPage from './ChatPage';
 import ProfilePage from './ProfilePage';
 import NewTaskPage from './NewTaskPage';
+import TeacherPage from './TeacherPage';
 
 function isAuth() {
   return localStorage.getItem('isAuthenticated') === 'true' && !!localStorage.getItem('jwtToken');
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/admin" element={<Protected el={<AdminPage />} />} />
         <Route path="/chat" element={<Protected el={<ChatPage />} />} />
         <Route path="/profile" element={<Protected el={<ProfilePage />} />} />
+        <Route path="/teacher" element={<Protected el={<TeacherPage />} />} />
       </Routes>
     </BrowserRouter>
   );

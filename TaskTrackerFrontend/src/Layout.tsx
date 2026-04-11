@@ -47,6 +47,16 @@ function IconGear() {
   );
 }
 
+function IconUsers() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  );
+}
 
 const NAV = [
   { path: '/new', label: 'Новая задача', Icon: IconPencil },
@@ -59,6 +69,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const userEmail = localStorage.getItem('userEmail') || '';
+  const userRole = localStorage.getItem('userRole') || 'student';
+  const isTeacher = userRole === 'teacher';
   const initial = userEmail.slice(0, 1).toUpperCase();
 
   const isActive = (path: string) =>
@@ -84,15 +96,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </button>
           );
         })}
-        <div className="mt-auto">
+
+        <div className="mt-auto flex flex-col items-center gap-1">
+          {/* Teacher: manage users */}
+          {isTeacher && (
+            <button
+              onClick={() => navigate('/teacher')}
+              className="flex flex-col items-center gap-1 w-full px-1 py-3 transition-colors"
+              style={{ color: pathname === '/teacher' ? P : '#9CA3AF' }}
+              title="Пользователи"
+            >
+              <span style={pathname === '/teacher' ? { background: PL, borderRadius: 10, padding: 6 } : { padding: 6 }}>
+                <IconUsers />
+              </span>
+              <span className="text-[9px] font-medium leading-tight text-center">Студенты</span>
+            </button>
+          )}
+
+          {/* Manage (admin) */}
           <button
             onClick={() => navigate('/admin')}
             className="flex flex-col items-center gap-1 w-full px-1 py-3 transition-colors"
             style={{ color: pathname === '/admin' ? P : '#9CA3AF' }}
+            title="Управление"
           >
             <span style={pathname === '/admin' ? { background: PL, borderRadius: 10, padding: 6 } : { padding: 6 }}>
               <IconGear />
             </span>
+            {isTeacher && <span className="text-[9px] font-medium leading-tight text-center">Группы</span>}
           </button>
         </div>
       </aside>
@@ -101,8 +132,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Header */}
         <header className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-100 shrink-0 h-14">
-          <div className="flex items-center gap-1.5">
-            <span className="font-bold text-gray-900 text-[15px]">🐛 BugTracker</span>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-gray-900 text-[15px]">BugTracker</span>
+            {isTeacher && (
+              <span className="text-[10px] font-semibold text-white px-2 py-0.5 rounded-full" style={{ background: P }}>
+                Преподаватель
+              </span>
+            )}
           </div>
           <button onClick={() => navigate('/profile')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <div

@@ -4,297 +4,308 @@ import { apiFetch } from './api';
 
 const P = '#7C5CBF';
 
-type Org = { id: number; name: string; role?: string };
+type Group = { id: number; name: string; role?: string };
 type Project = { id: number; org_id: number; name: string; role?: string };
-type OrgMember = { user_id: number; email: string; role: 'owner' | 'admin' | 'member' };
-type ProjectMember = { user_id: number; email: string; role: 'pm' | 'dev' | 'qa' | 'viewer' };
+type Member = { user_id: number; email: string; role: string };
 
-function Panel({ title, children }: { title: string; children: any }) {
+const inputCls = 'flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#7C5CBF] bg-white';
+const selectCls = 'px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none bg-white';
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5">
-      <h2 className="text-base font-bold text-gray-900 mb-4">{title}</h2>
+      <h2 className="text-sm font-bold text-gray-900 mb-4">{title}</h2>
       {children}
     </div>
   );
 }
 
 export default function AdminPage() {
-  const [orgs, setOrgs] = useState<Org[]>([]);
+  const role = localStorage.getItem('userRole') || 'student';
+  const isTeacher = role === 'teacher';
+
+  const [groups, setGroups] = useState<Group[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [orgMembers, setOrgMembers] = useState<OrgMember[]>([]);
-  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<number>(0);
+  const [selectedProjectId, setSelectedProjectId] = useState<number>(
+    () => Number(localStorage.getItem('selectedProjectId') || '0')
+  );
   const [loading, setLoading] = useState(false);
 
-  const [selectedOrgId, setSelectedOrgId] = useState<number>(() => Number(localStorage.getItem('selectedOrgId') || '0'));
-  const [selectedProjectId, setSelectedProjectId] = useState<number>(() => Number(localStorage.getItem('selectedProjectId') || '0'));
-
-  const selectedOrg = orgs.find(o => o.id === selectedOrgId);
-  const isOrgAdmin = selectedOrg?.role === 'owner' || selectedOrg?.role === 'admin';
-
-  const [newOrgName, setNewOrgName] = useState('');
+  const [newGroupName, setNewGroupName] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
-  const [orgMemberEmail, setOrgMemberEmail] = useState('');
-  const [orgMemberRole, setOrgMemberRole] = useState<'member' | 'admin'>('member');
-  const [orgMemberHint, setOrgMemberHint] = useState<string | null>(null);
-  const [projectMemberEmail, setProjectMemberEmail] = useState('');
-  const [projectMemberRole, setProjectMemberRole] = useState<'pm' | 'dev' | 'qa' | 'viewer'>('viewer');
-  const [projectMemberHint, setProjectMemberHint] = useState<string | null>(null);
+  const [memberEmail, setMemberEmail] = useState('');
+  const [memberHint, setMemberHint] = useState<string | null>(null);
 
-  const fetchOrgs = async () => {
+  const fetchGroups = async () => {
     setLoading(true);
     try {
       const res = await apiFetch(`${API_URL}/orgs`);
       const data = await res.json().catch(() => []);
-      const orgsData: Org[] = Array.isArray(data) ? data : [];
-      setOrgs(orgsData);
+      const list: Group[] = Array.isArray(data) ? data : [];
+      setGroups(list);
       const stored = Number(localStorage.getItem('selectedOrgId') || '0');
-      const firstId = orgsData[0]?.id || 0;
-      const nextOrg = stored && orgsData.some(o => o.id === stored) ? stored : firstId;
-      if (nextOrg && nextOrg !== selectedOrgId) {
-        setSelectedOrgId(nextOrg);
-        localStorage.setItem('selectedOrgId', String(nextOrg));
-      }
+      const first = list[0]?.id || 0;
+      const next = stored && list.some(g => g.id === stored) ? stored : first;
+      if (next) { setSelectedGroupId(next); localStorage.setItem('selectedOrgId', String(next)); }
     } finally { setLoading(false); }
   };
 
-  const fetchProjects = async (orgId: number) => {
-    if (!orgId) return;
+  const fetchProjects = async (groupId: number) => {
+    if (!groupId) return;
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_URL}/projects?org_id=${orgId}`);
+      const res = await apiFetch(`${API_URL}/projects?org_id=${groupId}`);
       const data = await res.json().catch(() => []);
       const list: Project[] = Array.isArray(data) ? data : [];
       setProjects(list);
       const stored = Number(localStorage.getItem('selectedProjectId') || '0');
-      const firstId = list[0]?.id || 0;
-      const nextProject = stored && list.some(p => p.id === stored) ? stored : firstId;
-      if (nextProject && nextProject !== selectedProjectId) {
-        setSelectedProjectId(nextProject);
-        localStorage.setItem('selectedProjectId', String(nextProject));
-      }
+      const first = list[0]?.id || 0;
+      const next = stored && list.some(p => p.id === stored) ? stored : first;
+      if (next) { setSelectedProjectId(next); localStorage.setItem('selectedProjectId', String(next)); }
+      else { setSelectedProjectId(0); }
     } finally { setLoading(false); }
   };
 
-  const fetchOrgMembers = async (orgId: number) => {
-    if (!orgId || !isOrgAdmin) { setOrgMembers([]); return; }
-    const res = await apiFetch(`${API_URL}/orgs/${orgId}/members`);
-    const data = await res.json().catch(() => []);
-    setOrgMembers(Array.isArray(data) ? data : []);
-  };
-
-  const fetchProjectMembers = async (projectId: number) => {
-    if (!projectId || !isOrgAdmin) { setProjectMembers([]); return; }
+  const fetchMembers = async (projectId: number) => {
+    if (!projectId) { setMembers([]); return; }
     const res = await apiFetch(`${API_URL}/projects/${projectId}/members`);
     const data = await res.json().catch(() => []);
-    setProjectMembers(Array.isArray(data) ? data : []);
+    setMembers(Array.isArray(data) ? data : []);
   };
 
-  useEffect(() => { fetchOrgs(); }, []);
-  useEffect(() => { if (selectedOrgId) fetchProjects(selectedOrgId); }, [selectedOrgId]);
-  useEffect(() => { if (selectedOrgId) fetchOrgMembers(selectedOrgId); }, [selectedOrgId, isOrgAdmin]);
-  useEffect(() => { if (selectedProjectId) fetchProjectMembers(selectedProjectId); }, [selectedProjectId, isOrgAdmin]);
+  useEffect(() => { fetchGroups(); }, []);
+  useEffect(() => { if (selectedGroupId) fetchProjects(selectedGroupId); }, [selectedGroupId]);
+  useEffect(() => { fetchMembers(selectedProjectId); }, [selectedProjectId]);
 
-  const createOrg = async () => {
-    const name = newOrgName.trim();
+  const createGroup = async () => {
+    const name = newGroupName.trim();
     if (!name) return;
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_URL}/orgs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+      const res = await apiFetch(`${API_URL}/orgs`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Ошибка');
-      setNewOrgName('');
-      await fetchOrgs();
+      setNewGroupName('');
+      await fetchGroups();
     } catch (e: any) { alert(e.message); }
     finally { setLoading(false); }
   };
 
   const createProject = async () => {
     const name = newProjectName.trim();
-    if (!name || !selectedOrgId) return;
+    if (!name || !selectedGroupId) return;
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_URL}/projects`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ org_id: selectedOrgId, name }) });
+      const res = await apiFetch(`${API_URL}/projects`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org_id: selectedGroupId, name }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Ошибка');
       setNewProjectName('');
-      await fetchProjects(selectedOrgId);
+      await fetchProjects(selectedGroupId);
     } catch (e: any) { alert(e.message); }
     finally { setLoading(false); }
   };
 
-  const addOrgMember = async () => {
-    if (!selectedOrgId) return;
-    const email = orgMemberEmail.trim();
-    if (!email) return;
-    setOrgMemberHint(null);
+  const addMember = async () => {
+    const email = memberEmail.trim();
+    if (!email || !selectedProjectId) return;
+    setMemberHint(null);
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_URL}/orgs/${selectedOrgId}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, role: orgMemberRole }) });
+      const res = await apiFetch(`${API_URL}/projects/${selectedProjectId}/members`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role: 'qa' }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Ошибка');
-      setOrgMemberEmail('');
-      await fetchOrgMembers(selectedOrgId);
+      setMemberEmail('');
+      await fetchMembers(selectedProjectId);
     } catch (e: any) {
-      if (e.message === 'user_not_found') setOrgMemberHint('Пользователь не зарегистрирован.');
-      else if (e.message === 'not_allowed') setOrgMemberHint('Недостаточно прав.');
-      else alert(e.message);
+      if (e.message === 'user_not_found') setMemberHint('Пользователь не зарегистрирован');
+      else setMemberHint(e.message);
     } finally { setLoading(false); }
   };
 
-  const addProjectMember = async () => {
-    if (!selectedProjectId) return;
-    const email = projectMemberEmail.trim();
-    if (!email) return;
-    setProjectMemberHint(null);
-    setLoading(true);
-    try {
-      const res = await apiFetch(`${API_URL}/projects/${selectedProjectId}/members`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, role: projectMemberRole }) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Ошибка');
-      setProjectMemberEmail('');
-      await fetchProjectMembers(selectedProjectId);
-    } catch (e: any) {
-      if (e.message === 'user_not_found') setProjectMemberHint('Пользователь не зарегистрирован.');
-      else if (e.message === 'not_allowed') setProjectMemberHint('Недостаточно прав.');
-      else alert(e.message);
-    } finally { setLoading(false); }
-  };
-
-  const updateOrgMemberRole = async (userId: number, role: OrgMember['role']) => {
-    if (!selectedOrgId) return;
-    await apiFetch(`${API_URL}/orgs/${selectedOrgId}/members/${userId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) });
-    await fetchOrgMembers(selectedOrgId);
-  };
-
-  const deleteOrgMember = async (userId: number) => {
-    if (!selectedOrgId || !confirm('Удалить участника?')) return;
-    await apiFetch(`${API_URL}/orgs/${selectedOrgId}/members/${userId}`, { method: 'DELETE' });
-    await fetchOrgMembers(selectedOrgId);
-  };
-
-  const updateProjectMemberRole = async (userId: number, role: ProjectMember['role']) => {
-    if (!selectedProjectId) return;
-    await apiFetch(`${API_URL}/projects/${selectedProjectId}/members/${userId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) });
-    await fetchProjectMembers(selectedProjectId);
-  };
-
-  const deleteProjectMember = async (userId: number) => {
+  const removeMember = async (userId: number) => {
     if (!selectedProjectId || !confirm('Удалить участника?')) return;
     await apiFetch(`${API_URL}/projects/${selectedProjectId}/members/${userId}`, { method: 'DELETE' });
-    await fetchProjectMembers(selectedProjectId);
+    await fetchMembers(selectedProjectId);
   };
 
-  const inputCls = 'flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#7C5CBF]';
-  const selectCls = 'px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none bg-white';
+  // Student view: read-only project info
+  if (!isTeacher) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <h1 className="text-xl font-bold text-gray-900 mb-6">Мои проекты</h1>
+        <Section title="Проект">
+          <div className="space-y-2">
+            <select
+              value={selectedProjectId || ''}
+              onChange={e => {
+                const v = Number(e.target.value);
+                setSelectedProjectId(v);
+                localStorage.setItem('selectedProjectId', String(v));
+              }}
+              className={selectCls + ' w-full'}
+            >
+              <option value="">Выберите проект</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+        </Section>
+        {members.length > 0 && (
+          <div className="mt-4">
+            <Section title="Участники проекта">
+              <div className="space-y-2">
+                {members.map(m => (
+                  <div key={m.user_id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0">
+                    <span className="text-sm text-gray-700 flex-1">{m.email}</span>
+                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{m.role}</span>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          </div>
+        )}
+      </div>
+    );
+  }
 
+  // Teacher view
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-gray-900">Управление</h1>
-        {loading && <span className="text-sm text-gray-400">Загрузка…</span>}
-      </div>
-
-      <div className="flex flex-wrap gap-3 mb-6">
-        <select value={selectedOrgId || ''} onChange={e => { const v = Number(e.target.value); setSelectedOrgId(v); setSelectedProjectId(0); localStorage.setItem('selectedOrgId', String(v)); localStorage.removeItem('selectedProjectId'); }} className={selectCls}>
-          {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
-        <select value={selectedProjectId || ''} onChange={e => { const v = Number(e.target.value); setSelectedProjectId(v); localStorage.setItem('selectedProjectId', String(v)); }} className={selectCls} disabled={!selectedOrgId}>
-          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        {loading && <span className="text-xs text-gray-400">Загрузка…</span>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Panel title="Создать организацию">
-          <div className="flex gap-2">
-            <input value={newOrgName} onChange={e => setNewOrgName(e.target.value)} placeholder="Название" className={inputCls} />
-            <button onClick={createOrg} className="text-white px-4 py-2.5 rounded-xl font-semibold text-sm" style={{ background: P }}>Создать</button>
-          </div>
-          <p className="text-xs text-gray-400 mt-2">Вы станете owner и сможете выдавать роли.</p>
-        </Panel>
 
-        <Panel title="Создать проект">
+        {/* Create group */}
+        <Section title="Создать группу">
           <div className="flex gap-2">
-            <input value={newProjectName} onChange={e => setNewProjectName(e.target.value)} placeholder="Название" className={inputCls} disabled={!selectedOrgId} />
-            <button onClick={createProject} disabled={!selectedOrgId} className="bg-gray-900 text-white px-4 py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50">Создать</button>
+            <input
+              value={newGroupName}
+              onChange={e => setNewGroupName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && createGroup()}
+              placeholder="Название группы"
+              className={inputCls}
+            />
+            <button onClick={createGroup} className="text-white px-4 py-2.5 rounded-xl font-semibold text-sm shrink-0" style={{ background: P }}>
+              Создать
+            </button>
           </div>
-          {!selectedOrgId && <p className="text-xs text-gray-400 mt-2">Сначала выберите организацию.</p>}
-        </Panel>
+          {groups.length > 0 && (
+            <div className="mt-3 space-y-1">
+              {groups.map(g => (
+                <button
+                  key={g.id}
+                  onClick={() => { setSelectedGroupId(g.id); localStorage.setItem('selectedOrgId', String(g.id)); }}
+                  className="w-full text-left text-sm px-3 py-2 rounded-xl transition-colors"
+                  style={selectedGroupId === g.id ? { background: '#EDE9F7', color: P, fontWeight: 600 } : { color: '#374151' }}
+                >
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </Section>
 
-        <Panel title="Добавить участника в организацию">
-          {!isOrgAdmin ? (
-            <p className="text-sm text-gray-400">Нужно быть owner/admin организации.</p>
+        {/* Create project */}
+        <Section title="Создать проект">
+          {!selectedGroupId ? (
+            <p className="text-sm text-gray-400">Сначала выберите группу.</p>
+          ) : (
+            <>
+              <div className="flex gap-2 mb-3">
+                <input
+                  value={newProjectName}
+                  onChange={e => setNewProjectName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && createProject()}
+                  placeholder="Название проекта"
+                  className={inputCls}
+                />
+                <button onClick={createProject} className="bg-gray-900 text-white px-4 py-2.5 rounded-xl font-semibold text-sm shrink-0">
+                  Создать
+                </button>
+              </div>
+              {projects.length > 0 && (
+                <div className="space-y-1">
+                  {projects.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => { setSelectedProjectId(p.id); localStorage.setItem('selectedProjectId', String(p.id)); }}
+                      className="w-full text-left text-sm px-3 py-2 rounded-xl transition-colors"
+                      style={selectedProjectId === p.id ? { background: '#EDE9F7', color: P, fontWeight: 600 } : { color: '#374151' }}
+                    >
+                      {p.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </Section>
+
+        {/* Add member */}
+        <Section title="Добавить студента в проект">
+          {!selectedProjectId ? (
+            <p className="text-sm text-gray-400">Сначала выберите проект.</p>
           ) : (
             <div className="space-y-2">
-              <input value={orgMemberEmail} onChange={e => setOrgMemberEmail(e.target.value)} placeholder="email" className={inputCls + ' w-full'} />
               <div className="flex gap-2">
-                <select value={orgMemberRole} onChange={e => setOrgMemberRole(e.target.value as any)} className={selectCls + ' flex-1'}>
-                  <option value="member">member</option><option value="admin">admin</option>
-                </select>
-                <button onClick={addOrgMember} className="text-white px-4 py-2.5 rounded-xl font-semibold text-sm" style={{ background: '#10B981' }}>Добавить</button>
+                <input
+                  value={memberEmail}
+                  onChange={e => { setMemberEmail(e.target.value); setMemberHint(null); }}
+                  onKeyDown={e => e.key === 'Enter' && addMember()}
+                  placeholder="Email студента"
+                  className={inputCls}
+                />
+                <button onClick={addMember} className="text-white px-4 py-2.5 rounded-xl font-semibold text-sm shrink-0" style={{ background: '#10B981' }}>
+                  Добавить
+                </button>
               </div>
               <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-400">Пользователь должен быть зарегистрирован.</p>
-                <button onClick={async () => { await navigator.clipboard.writeText(`${window.location.origin}/login`); alert('Ссылка скопирована'); }} className="text-xs font-bold" style={{ color: P }}>Скопировать ссылку</button>
+                <p className="text-xs text-gray-400">Студент должен быть зарегистрирован</p>
+                <button
+                  onClick={async () => { await navigator.clipboard.writeText(`${window.location.origin}/login`); alert('Ссылка скопирована'); }}
+                  className="text-xs font-bold"
+                  style={{ color: P }}
+                >
+                  Скопировать ссылку
+                </button>
               </div>
-              {orgMemberHint && <p className="text-xs text-orange-600 bg-orange-50 border border-orange-100 rounded-xl p-2">{orgMemberHint}</p>}
+              {memberHint && <p className="text-xs text-orange-600 bg-orange-50 border border-orange-100 rounded-xl p-2">{memberHint}</p>}
             </div>
           )}
-        </Panel>
+        </Section>
 
-        <Panel title="Участники организации">
-          {!isOrgAdmin ? (
-            <p className="text-sm text-gray-400">Нужно быть owner/admin организации.</p>
+        {/* Members list */}
+        <Section title="Участники проекта">
+          {!selectedProjectId ? (
+            <p className="text-sm text-gray-400">Выберите проект.</p>
+          ) : members.length === 0 ? (
+            <p className="text-sm text-gray-400">Нет участников</p>
           ) : (
             <div className="space-y-2">
-              {orgMembers.map(m => (
+              {members.map(m => (
                 <div key={m.user_id} className="flex items-center gap-2 p-2 rounded-xl border border-gray-100">
-                  <p className="text-sm text-gray-700 truncate flex-1">{m.email}</p>
-                  <select value={m.role} onChange={e => updateOrgMemberRole(m.user_id, e.target.value as OrgMember['role'])} className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs">
-                    <option value="owner">owner</option><option value="admin">admin</option><option value="member">member</option>
-                  </select>
-                  <button onClick={() => deleteOrgMember(m.user_id)} className="text-xs font-bold text-red-500 hover:text-red-700">Удалить</button>
+                  <span className="text-sm text-gray-700 flex-1 truncate">{m.email}</span>
+                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{m.role}</span>
+                  <button onClick={() => removeMember(m.user_id)} className="text-xs font-bold text-red-400 hover:text-red-600 shrink-0">
+                    Удалить
+                  </button>
                 </div>
               ))}
-              {orgMembers.length === 0 && <p className="text-xs text-gray-400">Нет участников</p>}
             </div>
           )}
-        </Panel>
-
-        <Panel title="Добавить участника в проект">
-          {!isOrgAdmin ? (
-            <p className="text-sm text-gray-400">Нужно быть owner/admin организации.</p>
-          ) : (
-            <div className="space-y-2">
-              <input value={projectMemberEmail} onChange={e => setProjectMemberEmail(e.target.value)} placeholder="email" className={inputCls + ' w-full'} disabled={!selectedProjectId} />
-              <div className="flex gap-2">
-                <select value={projectMemberRole} onChange={e => setProjectMemberRole(e.target.value as any)} className={selectCls + ' flex-1'} disabled={!selectedProjectId}>
-                  <option value="pm">pm</option><option value="dev">dev</option><option value="qa">qa</option><option value="viewer">viewer</option>
-                </select>
-                <button onClick={addProjectMember} disabled={!selectedProjectId} className="text-white px-4 py-2.5 rounded-xl font-semibold text-sm disabled:opacity-50" style={{ background: '#3B82F6' }}>Добавить</button>
-              </div>
-              {projectMemberHint && <p className="text-xs text-orange-600 bg-orange-50 border border-orange-100 rounded-xl p-2">{projectMemberHint}</p>}
-            </div>
-          )}
-        </Panel>
-
-        <Panel title="Участники проекта">
-          {!isOrgAdmin ? (
-            <p className="text-sm text-gray-400">Нужно быть owner/admin организации.</p>
-          ) : (
-            <div className="space-y-2">
-              {projectMembers.map(m => (
-                <div key={m.user_id} className="flex items-center gap-2 p-2 rounded-xl border border-gray-100">
-                  <p className="text-sm text-gray-700 truncate flex-1">{m.email}</p>
-                  <select value={m.role} onChange={e => updateProjectMemberRole(m.user_id, e.target.value as ProjectMember['role'])} className="px-2 py-1.5 rounded-lg border border-gray-200 text-xs">
-                    <option value="pm">pm</option><option value="dev">dev</option><option value="qa">qa</option><option value="viewer">viewer</option>
-                  </select>
-                  <button onClick={() => deleteProjectMember(m.user_id)} className="text-xs font-bold text-red-500 hover:text-red-700">Удалить</button>
-                </div>
-              ))}
-              {projectMembers.length === 0 && <p className="text-xs text-gray-400">Нет участников</p>}
-            </div>
-          )}
-        </Panel>
+        </Section>
       </div>
     </div>
   );
