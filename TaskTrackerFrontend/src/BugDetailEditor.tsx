@@ -186,7 +186,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
     (async () => {
       try {
-        const res = await fetch(`${API_URL}/users/${creatorId}`, { headers: authHeaders });
+        const res = await apiFetch(`${API_URL}/users/${creatorId}`);
         const emails = (await res.json()) as string[];
         if (!cancelled) {
           setAssignableEmails(Array.isArray(emails) ? emails : []);
