@@ -69,14 +69,6 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const [commentBody, setCommentBody] = useState('');
   const [commentPending, setCommentPending] = useState(false);
 
-  // Audit log
-  const [auditLog, setAuditLog] = useState<{ id_pk: number; user_id_fk: number; field: string; old_value: string; new_value: string; changed_at: string }[]>([]);
-
-  // Relations
-  const [relations, setRelations] = useState<{ id_pk: number; from_bug_id_fk: number; to_bug_id_fk: number; relation_type: string }[]>([]);
-  const [newRelBugId, setNewRelBugId] = useState('');
-  const [newRelType, setNewRelType] = useState('related');
-  const [relPending, setRelPending] = useState(false);
 
   const [photo, setPhoto] = useState<string | undefined>();
   const [photoName, setPhotoName] = useState('');
@@ -246,57 +238,20 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   }, [currentBug, isOpen]);
 
   useEffect(() => {
-    if (!isOpen || !currentBug) { setComments([]); setAuditLog([]); setRelations([]); return; }
+    if (!isOpen || !currentBug) { setComments([]); return; }
     const id = currentBug.id ?? currentBug.id_pk;
     if (!id) return;
     let cancelled = false;
     (async () => {
       try {
-        const [cRes, aRes, rRes] = await Promise.all([
-          apiFetch(`${API_URL}/bugs/${id}/comments`),
-          apiFetch(`${API_URL}/bugs/${id}/audit`),
-          apiFetch(`${API_URL}/bugs/${id}/relations`),
-        ]);
+        const cRes = await apiFetch(`${API_URL}/bugs/${id}/comments`);
         const cData = await cRes.json().catch(() => []);
-        const aData = await aRes.json().catch(() => []);
-        const rData = await rRes.json().catch(() => []);
-        if (!cancelled) {
-          setComments(Array.isArray(cData) ? cData : []);
-          setAuditLog(Array.isArray(aData) ? aData : []);
-          setRelations(Array.isArray(rData) ? rData : []);
-        }
+        if (!cancelled) setComments(Array.isArray(cData) ? cData : []);
       } catch (err) { console.error(err); }
     })();
     return () => { cancelled = true; };
   }, [isOpen, currentBug]);
 
-  const handleAddRelation = async () => {
-    const toId = parseInt(newRelBugId, 10);
-    if (!toId) return;
-    const id = currentBug?.id ?? currentBug?.id_pk;
-    if (!id) return;
-    setRelPending(true);
-    try {
-      const res = await apiFetch(`${API_URL}/bugs/${id}/relations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to_bug_id: toId, relation_type: newRelType }),
-      });
-      if (res.ok) {
-        const newRel = await res.json();
-        setRelations(prev => [...prev, newRel]);
-        setNewRelBugId('');
-      }
-    } catch (err) { console.error(err); }
-    finally { setRelPending(false); }
-  };
-
-  const handleDeleteRelation = async (relId: number) => {
-    try {
-      const res = await apiFetch(`${API_URL}/relations/${relId}`, { method: 'DELETE' });
-      if (res.ok) setRelations(prev => prev.filter(r => r.id_pk !== relId));
-    } catch (err) { console.error(err); }
-  };
 
   const handleAddComment = async () => {
     const trimmed = commentBody.trim();
@@ -645,62 +600,6 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
             </div>
           </div>
 
-          {isEditing && auditLog.length > 0 && (
-            <div className="pt-6 border-t border-slate-50">
-              <h2 className="text-xl font-black text-slate-900 mb-4">Лог изменений</h2>
-              <div className="space-y-2">
-                {auditLog.map(entry => (
-                  <div key={entry.id_pk} className="flex flex-wrap items-center gap-2 text-sm p-3 rounded-xl bg-slate-50 border border-slate-100">
-                    <span className="font-bold text-slate-700">{entry.field}</span>
-                    <span className="text-slate-400">·</span>
-                    <span className="line-through text-slate-400">{entry.old_value || '—'}</span>
-                    <span className="text-slate-400">→</span>
-                    <span className="font-semibold text-slate-800">{entry.new_value || '—'}</span>
-                    <span className="ml-auto text-[10px] text-slate-400">{new Date(entry.changed_at).toLocaleString()}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {isEditing && (
-            <div className="pt-6 border-t border-slate-50">
-              <h2 className="text-xl font-black text-slate-900 mb-4">Связанные тикеты</h2>
-              <div className="space-y-2 mb-4">
-                {relations.length === 0 && <p className="text-sm text-slate-400">Нет связей</p>}
-                {relations.map(r => {
-                  const bugId = currentBug?.id ?? currentBug?.id_pk;
-                  const otherId = r.from_bug_id_fk === bugId ? r.to_bug_id_fk : r.from_bug_id_fk;
-                  const typeLabel = r.relation_type === 'duplicate' ? 'Дубликат' : r.relation_type === 'blocks' ? 'Блокирует' : 'Связан';
-                  return (
-                    <div key={r.id_pk} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                      <span className="text-xs font-bold text-slate-500 w-24 shrink-0">{typeLabel}</span>
-                      <span className="text-sm font-semibold text-slate-800">Баг #{otherId}</span>
-                      <button type="button" onClick={() => handleDeleteRelation(r.id_pk)} className="ml-auto text-slate-300 hover:text-red-400 transition-colors text-lg leading-none">×</button>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <select value={newRelType} onChange={e => setNewRelType(e.target.value)} className="p-2 rounded-xl border border-slate-200 bg-white text-sm outline-none">
-                  <option value="related">Связан</option>
-                  <option value="duplicate">Дубликат</option>
-                  <option value="blocks">Блокирует</option>
-                </select>
-                <input
-                  type="number"
-                  placeholder="ID бага"
-                  value={newRelBugId}
-                  onChange={e => setNewRelBugId(e.target.value)}
-                  className="flex-1 min-w-[120px] p-2 rounded-xl border border-slate-200 bg-white text-sm outline-none"
-                />
-                <button type="button" disabled={relPending || !newRelBugId} onClick={handleAddRelation}
-                  className="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-700 disabled:opacity-50 transition-colors">
-                  Добавить
-                </button>
-              </div>
-            </div>
-          )}
 
           {isEditing && (
             <div className="pt-6 border-t border-slate-50">
