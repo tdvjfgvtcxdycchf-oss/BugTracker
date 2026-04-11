@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from './config';
 import { apiFetch } from './api';
@@ -10,9 +10,30 @@ export default function NewTaskPage() {
   const [taskType, setTaskType] = useState('Задача');
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const selectedProjectId = Number(localStorage.getItem('selectedProjectId') || '0');
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setPhoto(file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = ev => setPhotoPreview(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setPhotoPreview(null);
+    }
+  };
+
+  const removePhoto = () => {
+    setPhoto(null);
+    setPhotoPreview(null);
+    if (fileRef.current) fileRef.current.value = '';
+  };
 
   const handleCreate = async () => {
     const taskTitle = title.trim() || `${taskType}: ${desc.trim().slice(0, 40)}`;
@@ -28,6 +49,15 @@ export default function NewTaskPage() {
         body: JSON.stringify({ title: taskTitle, description: desc.trim(), project_id: selectedProjectId }),
       });
       if (!res.ok) throw new Error('Не удалось создать задачу');
+      const data = await res.json();
+      const taskId = data.id;
+
+      if (photo && taskId) {
+        const form = new FormData();
+        form.append('photo', photo);
+        await apiFetch(`${API_URL}/tasks/${taskId}/photo`, { method: 'POST', body: form });
+      }
+
       navigate('/');
     } catch (err: any) {
       alert(err.message);
@@ -66,13 +96,45 @@ export default function NewTaskPage() {
           />
         </div>
 
-        <div className="mb-6">
+        <div className="mb-4">
           <textarea
             placeholder="Описание..."
             value={desc}
             onChange={e => setDesc(e.target.value)}
-            rows={5}
+            rows={4}
             className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 resize-none outline-none focus:border-[#7C5CBF]"
+          />
+        </div>
+
+        {/* Photo */}
+        <div className="mb-6">
+          {photoPreview ? (
+            <div className="relative rounded-xl overflow-hidden border border-gray-200">
+              <img src={photoPreview} alt="preview" className="w-full max-h-48 object-cover" />
+              <button
+                onClick={removePhoto}
+                className="absolute top-2 right-2 bg-black/50 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-black/70 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 flex flex-col items-center gap-1 text-gray-400 hover:border-[#7C5CBF] hover:text-[#7C5CBF] transition-colors"
+            >
+              <span className="text-2xl">📎</span>
+              <span className="text-xs font-medium">Прикрепить фото</span>
+              <span className="text-[10px]">до 15 МБ</span>
+            </button>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handlePhotoChange}
           />
         </div>
 
