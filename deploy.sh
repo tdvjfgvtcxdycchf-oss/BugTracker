@@ -5,7 +5,7 @@ DOMAIN="bugtracker.sytes.net"
 APP_DIR="/home/zolbrain/BugTracker"
 WWW_DIR="/var/www/bugtracker"
 
-FRONTEND_URL="http://bugtracker.sytes.net"
+FRONTEND_URL="https://bugtracker.sytes.net"
 
 echo "=== Checking required tools ==="
 command -v git >/dev/null
