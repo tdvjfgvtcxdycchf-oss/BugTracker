@@ -18,6 +18,8 @@ export default function TeacherPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [resetUserId, setResetUserId] = useState<number | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -60,6 +62,24 @@ export default function TeacherPage() {
       if (!res.ok) throw new Error();
       setUsers(prev => prev.filter(u => u.id !== userId));
     } catch { alert('Не удалось удалить пользователя'); }
+  };
+
+  const resetUserPassword = async (userId: number) => {
+    if (!resetPassword.trim()) return;
+    try {
+      const res = await apiFetch(`${API_URL}/admin/users/${userId}/password`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: resetPassword }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || 'Ошибка');
+      }
+      setResetUserId(null);
+      setResetPassword('');
+      alert('Пароль изменён');
+    } catch (e: any) { alert(e.message); }
   };
 
   const myId = Number(localStorage.getItem('userId') || '0');
@@ -125,12 +145,45 @@ export default function TeacherPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {u.id !== myId && (
-                        <button
-                          onClick={() => deleteUser(u.id, u.email)}
-                          className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors"
-                        >
-                          Удалить
-                        </button>
+                        <div className="flex flex-col items-end gap-1">
+                          {resetUserId === u.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="password"
+                                value={resetPassword}
+                                onChange={e => setResetPassword(e.target.value)}
+                                placeholder="Новый пароль"
+                                className="text-xs border border-gray-200 rounded-lg px-2 py-1 outline-none w-32 focus:border-[#7C5CBF]"
+                              />
+                              <button
+                                onClick={() => resetUserPassword(u.id)}
+                                className="text-xs text-white px-2 py-1 rounded-lg font-medium"
+                                style={{ background: P }}
+                              >
+                                ОК
+                              </button>
+                              <button
+                                onClick={() => { setResetUserId(null); setResetPassword(''); }}
+                                className="text-xs text-gray-400 hover:text-gray-600 font-medium"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setResetUserId(u.id); setResetPassword(''); }}
+                              className="text-xs text-[#7C5CBF] hover:text-[#5a3f9a] font-medium transition-colors"
+                            >
+                              Сбросить пароль
+                            </button>
+                          )}
+                          <button
+                            onClick={() => deleteUser(u.id, u.email)}
+                            className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors"
+                          >
+                            Удалить
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
