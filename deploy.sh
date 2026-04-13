@@ -39,6 +39,9 @@ rm -rf "$WWW_DIR"
 mkdir -p "$WWW_DIR"
 cp -r dist/* "$WWW_DIR/"
 
+echo "=== Updating nginx config ==="
+cp "$APP_DIR/nginx/bugtracker.conf" /etc/nginx/sites-available/bugtracker.conf
+
 echo "=== Reloading nginx ==="
 nginx -t && systemctl reload nginx
 
