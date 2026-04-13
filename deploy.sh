@@ -5,8 +5,7 @@ DOMAIN="bugtracker.sytes.net"
 APP_DIR="/home/zolbrain/BugTracker"
 WWW_DIR="/var/www/bugtracker"
 
-# Адрес бэкенда (сервер друга) — поменяй на реальный URL когда будет готово
-API_URL="http://176.108.248.47:9191"
+FRONTEND_URL="http://bugtracker.sytes.net"
 
 echo "=== Checking required tools ==="
 command -v git >/dev/null
@@ -33,7 +32,7 @@ fi
 echo "=== Building frontend ==="
 cd "$APP_DIR/TaskTrackerFrontend"
 npm ci
-VITE_API_URL="$API_URL" npm run build
+VITE_API_URL="$FRONTEND_URL/api" npm run build
 
 echo "=== Deploying frontend static files ==="
 rm -rf "$WWW_DIR"
@@ -43,4 +42,4 @@ cp -r dist/* "$WWW_DIR/"
 echo "=== Reloading nginx ==="
 nginx -t && systemctl reload nginx
 
-echo "=== Done! https://$DOMAIN ==="
+echo "=== Done! http://$DOMAIN ==="
