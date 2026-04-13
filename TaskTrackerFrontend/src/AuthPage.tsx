@@ -46,7 +46,7 @@ export default function AuthPage() {
         localStorage.setItem('userId', userId.toString());
         localStorage.setItem('userEmail', email);
         localStorage.setItem('jwtToken', token);
-        localStorage.setItem('userRole', data.role || 'qa');
+        localStorage.setItem('userRole', data.role || 'student');
         navigate('/');
         window.location.reload();
       } else {
