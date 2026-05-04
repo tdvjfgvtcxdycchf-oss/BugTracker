@@ -145,29 +145,13 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
     (async () => {
       try {
-        const results = await Promise.all(
+        const resolvedUsers: User[] = await Promise.all(
           ids.map(async (id) => {
             const res = await apiFetch(`${API_URL}/users/${id}`);
-            const emails = (await res.json()) as string[];
-            return { id, emails };
+            const data = await res.json().catch(() => ({}));
+            return { id_pk: id, login: data.login ?? `User #${id}` };
           })
         );
-
-        const union = new Set<string>();
-        const excludedById = new Map<number, Set<string>>();
-
-        for (const { id, emails } of results) {
-          const excluded = new Set(emails);
-          excludedById.set(id, excluded);
-          emails.forEach((e) => union.add(e));
-        }
-
-        const resolvedUsers: User[] = ids.map((id) => {
-          const excluded = excludedById.get(id) ?? new Set<string>();
-          const missing = [...union].find((e) => !excluded.has(e));
-          return { id_pk: id, login: missing ?? `User #${id}` };
-        });
-
         if (!cancelled) setUsers(resolvedUsers);
       } catch (err) {
         console.error(err);
@@ -190,10 +174,12 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
     (async () => {
       try {
-        const res = await apiFetch(`${API_URL}/users/${creatorId}`);
-        const emails = (await res.json()) as string[];
+        const projectId = localStorage.getItem('selectedProjectId');
+        if (!projectId) return;
+        const res = await apiFetch(`${API_URL}/projects/${projectId}/members`);
+        const members = await res.json().catch(() => []);
         if (!cancelled) {
-          setAssignableEmails(Array.isArray(emails) ? emails : []);
+          setAssignableEmails(Array.isArray(members) ? members.map((m: any) => m.login).filter(Boolean) : []);
           setAssignedToEmailChoice('');
         }
       } catch (err) {
