@@ -33,7 +33,7 @@ interface Bug {
 interface User {
   id_pk?: number;
   id?: number;
-  email: string;
+  login: string;
 }
 
 interface Props {
@@ -59,7 +59,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const isEditing = !!currentBug || !!bugId;
 
   const [users, setUsers] = useState<User[]>([]);
-  const currentUserEmail = localStorage.getItem('userEmail') || 'Guest';
+  const currentUserEmail = localStorage.getItem('userLogin') || 'Guest';
   const currentUserId = Number(localStorage.getItem('userId') || '0');
   const currentUserRole = localStorage.getItem('userRole') || 'qa';
   const [lifecyclePending, setLifecyclePending] = useState(false);
@@ -70,17 +70,17 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const [commentPending, setCommentPending] = useState(false);
 
 
-  const [photo, setPhoto] = useState<string | undefined>();
-  const [photoName, setPhotoName] = useState('');
-  const [lightbox, setLightbox] = useState(false);
-  const [pendingPhotoFile, setPendingPhotoFile] = useState<File | null>(null);
+  const [existingPhotos, setExistingPhotos] = useState<{ id: number; url: string }[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
+  const [lightboxPhoto, setLightboxPhoto] = useState<string | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setPhotoName(file.name);
-    setPendingPhotoFile(file);
-    setPhoto(URL.createObjectURL(file));
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setPendingPhotos(prev => [...prev, ...files]);
+    files.forEach(f => setPendingPreviews(prev => [...prev, URL.createObjectURL(f)]));
+    e.target.value = '';
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -88,9 +88,21 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     if (!item) return;
     const file = item.getAsFile();
     if (!file) return;
-    setPhotoName('скриншот.png');
-    setPendingPhotoFile(file);
-    setPhoto(URL.createObjectURL(file));
+    setPendingPhotos(prev => [...prev, file]);
+    setPendingPreviews(prev => [...prev, URL.createObjectURL(file)]);
+  };
+
+  const removePending = (i: number) => {
+    URL.revokeObjectURL(pendingPreviews[i]);
+    setPendingPhotos(prev => prev.filter((_, j) => j !== i));
+    setPendingPreviews(prev => prev.filter((_, j) => j !== i));
+  };
+
+  const deleteExistingPhoto = async (photoId: number) => {
+    const bugId = getBugId();
+    if (!bugId) return;
+    await apiFetch(`${API_URL}/bugs/${bugId}/photos/${photoId}`, { method: 'DELETE' });
+    setExistingPhotos(prev => prev.filter(p => p.id !== photoId));
   };
 
   const [severity, setSeverity] = useState('Low');
@@ -111,7 +123,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
       setUsers(prev => {
         const exists = prev.some(u => u.id_pk === currentUserId || u.id === currentUserId);
         if (exists) return prev;
-        return [...prev, { id_pk: currentUserId, email: currentUserEmail }];
+        return [...prev, { id_pk: currentUserId, login: currentUserEmail }];
       });
     }
   }, [isOpen, currentUserId, currentUserEmail]);
@@ -153,7 +165,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
         const resolvedUsers: User[] = ids.map((id) => {
           const excluded = excludedById.get(id) ?? new Set<string>();
           const missing = [...union].find((e) => !excluded.has(e));
-          return { id_pk: id, email: missing ?? `User #${id}` };
+          return { id_pk: id, login: missing ?? `User #${id}` };
         });
 
         if (!cancelled) setUsers(resolvedUsers);
@@ -195,31 +207,19 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   }, [isOpen, currentBug, currentUserId]);
 
   useEffect(() => {
-    setPendingPhotoFile(null);
+    setPendingPhotos([]);
+    setPendingPreviews([]);
     if (isOpen && currentBug) {
       const id = currentBug.id ?? currentBug.id_pk;
       if (!id) return;
       let cancelled = false;
-      (async () => {
-        try {
-          const res = await apiFetch(`${API_URL}/bugs/${id}/photo?t=${Date.now()}`);
-          if (!res.ok) return;
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          if (!cancelled) {
-            setPhoto(url);
-            setPhotoName('фото');
-          } else {
-            URL.revokeObjectURL(url);
-          }
-        } catch (e) {
-          // ignore
-        }
-      })();
+      apiFetch(`${API_URL}/bugs/${id}/photos`)
+        .then(r => r.json())
+        .then(d => { if (!cancelled) setExistingPhotos(Array.isArray(d) ? d : []); })
+        .catch(() => {});
       return () => { cancelled = true; };
     } else {
-      setPhoto(undefined);
-      setPhotoName('');
+      setExistingPhotos([]);
     }
   }, [isOpen, currentBug]);
 
@@ -274,10 +274,10 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
     finally { setCommentPending(false); }
   };
 
-  const getUserEmail = (id?: number) => {
+  const getUserLogin = (id?: number) => {
     if (!id) return '—';
     const found = users.find(u => u.id_pk === id || u.id === id);
-    return found ? found.email : `User #${id}`;
+    return found ? found.login : `User #${id}`;
   };
 
   const getBugId = () => currentBug?.id ?? currentBug?.id_pk ?? bugId;
@@ -340,15 +340,18 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
       if (res.ok) {
         await refreshBugs();
-        if (pendingPhotoFile) {
+        if (pendingPhotos.length > 0) {
           const bugsRes = await apiFetch(`${API_URL}/bugs/${task.id}`);
           const bugs = await bugsRes.json().catch(() => []);
           const targetId = isEditing ? getBugId() : Math.max(...bugs.map((b: any) => b.id));
           if (targetId) {
-            const form = new FormData();
-            form.append('photo', pendingPhotoFile);
-            await apiFetch(`${API_URL}/bugs/${targetId}/photo`, { method: 'POST', body: form });
-            setPendingPhotoFile(null);
+            for (const f of pendingPhotos) {
+              const form = new FormData();
+              form.append('photo', f);
+              await apiFetch(`${API_URL}/bugs/${targetId}/photos`, { method: 'POST', body: form });
+            }
+            setPendingPhotos([]);
+            setPendingPreviews([]);
           }
         }
         if (opts?.closeOnSuccess !== false) onClose();
@@ -487,7 +490,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
           {isCreator && assignedToId == null && (
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-900">Закрепить за (email)</label>
+              <label className="text-xs font-bold text-slate-900">Закрепить за</label>
               {assignableEmailsPending ? (
                 <div className="text-sm text-slate-500">Загрузка...</div>
               ) : (
@@ -496,7 +499,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
                   onChange={(e) => setAssignedToEmailChoice(e.target.value)}
                   className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 outline-none"
                 >
-                  <option value="">Выберите email</option>
+                  <option value="">Выберите логин</option>
                   {assignableEmails.map((e) => (
                     <option key={e} value={e}>{e}</option>
                   ))}
@@ -547,30 +550,41 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
 
           <div className="space-y-2" onPaste={handlePaste}>
             <label className="text-xs font-bold text-slate-900">Фото</label>
-            <label className="flex items-center gap-3 cursor-pointer w-full p-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 hover:border-blue-400 transition-colors">
-              <span className="text-lg">📎</span>
-              <span className="text-sm text-slate-500 truncate">{photoName || 'Прикрепить или вставить (Ctrl+V)...'}</span>
-              <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-            </label>
-            {photo && (
-              <div className="relative">
-                <img
-                  src={photo}
-                  alt="скриншот"
-                  className="w-full max-h-48 object-cover rounded-xl border border-slate-100 cursor-zoom-in"
-                  onClick={() => setLightbox(true)}
-                  onError={() => { setPhoto(undefined); setPhotoName(''); }}
-                />
+            {(existingPhotos.length > 0 || pendingPreviews.length > 0) && (
+              <div className="flex flex-wrap gap-2">
+                {existingPhotos.map(p => (
+                  <div key={p.id} className="relative w-24 h-24 rounded-xl overflow-hidden border border-slate-200">
+                    <img src={p.url} className="w-full h-full object-cover cursor-zoom-in" onClick={() => setLightboxPhoto(p.url)} />
+                    <button
+                      onClick={() => deleteExistingPhoto(p.id)}
+                      className="absolute top-1 right-1 bg-black/50 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] hover:bg-black/70"
+                    >✕</button>
+                  </div>
+                ))}
+                {pendingPreviews.map((url, i) => (
+                  <div key={`p${i}`} className="relative w-24 h-24 rounded-xl overflow-hidden border-2 border-dashed border-blue-300">
+                    <img src={url} className="w-full h-full object-cover cursor-zoom-in" onClick={() => setLightboxPhoto(url)} />
+                    <button
+                      onClick={() => removePending(i)}
+                      className="absolute top-1 right-1 bg-black/50 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] hover:bg-black/70"
+                    >✕</button>
+                  </div>
+                ))}
               </div>
             )}
+            <label className="flex items-center gap-3 cursor-pointer w-full p-3 rounded-xl border border-dashed border-slate-200 bg-slate-50 hover:border-blue-400 transition-colors">
+              <span className="text-lg">📎</span>
+              <span className="text-sm text-slate-500">{(existingPhotos.length + pendingPreviews.length) > 0 ? 'Добавить ещё или вставить (Ctrl+V)...' : 'Прикрепить или вставить (Ctrl+V)...'}</span>
+              <input type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} />
+            </label>
           </div>
 
-          {lightbox && photo && (
+          {lightboxPhoto && (
             <div
               className="fixed inset-0 z-[2000] bg-black/80 flex items-center justify-center p-4"
-              onClick={() => setLightbox(false)}
+              onClick={() => setLightboxPhoto(null)}
             >
-              <img src={photo} alt="full" className="max-w-full max-h-full rounded-xl shadow-2xl" />
+              <img src={lightboxPhoto} alt="full" className="max-w-full max-h-full rounded-xl shadow-2xl" />
             </div>
           )}
 
@@ -579,22 +593,22 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <AuditEntry
                 label="СОЗДАН"
-                email={createdById === currentUserId ? currentUserEmail : getUserEmail(createdById)}
+                email={createdById === currentUserId ? currentUserEmail : getUserLogin(createdById)}
                 date={isEditing ? formatDate(createdTime) : null}
               />
               <AuditEntry
                 label="ЗАКРЕПЛЕН ЗА"
-                email={assignedToId != null ? getUserEmail(assignedToId) : '—'}
+                email={assignedToId != null ? getUserLogin(assignedToId) : '—'}
                 date={formatDate(assignedTime)}
               />
               <AuditEntry
                 label="СДАЛ"
-                email={passedById != null ? getUserEmail(passedById) : '—'}
+                email={passedById != null ? getUserLogin(passedById) : '—'}
                 date={formatDate(passedTime)}
               />
               <AuditEntry
                 label="ПРИНЯЛ"
-                email={acceptedById != null ? getUserEmail(acceptedById) : '—'}
+                email={acceptedById != null ? getUserLogin(acceptedById) : '—'}
                 date={formatDate(acceptedTime)}
               />
             </div>
@@ -611,7 +625,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
                 {comments.map(c => (
                   <div key={c.id_pk} className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold text-slate-500">{getUserEmail(c.user_id_fk)}</span>
+                      <span className="text-xs font-bold text-slate-500">{getUserLogin(c.user_id_fk)}</span>
                       <span className="ml-auto text-[10px] text-slate-400">{new Date(c.created_at).toLocaleString()}</span>
                     </div>
                     <p className="text-sm text-slate-800 whitespace-pre-wrap">{c.body}</p>

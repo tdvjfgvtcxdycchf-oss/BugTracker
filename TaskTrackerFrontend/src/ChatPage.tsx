@@ -8,7 +8,7 @@ const PL = '#EDE9F7';
 type Thread = {
   id: number;
   scope: 'org' | 'project' | 'dm';
-  peer_email?: string;
+  peer_login?: string;
   title?: string;
   last_message?: string;
   unread_count?: number;
@@ -16,7 +16,7 @@ type Thread = {
 type Msg = {
   id: number;
   user_id: number;
-  user_email: string;
+  user_login: string;
   body: string;
   created_at: string;
   edited_at?: string;
@@ -64,7 +64,7 @@ export default function ChatPage() {
 
   const activeThread = threads.find(t => t.id === activeThreadId);
   const activeLabel = activeThread
-    ? (activeThread.scope === 'dm' ? activeThread.peer_email : activeThread.title) || `#${activeThread.id}`
+    ? (activeThread.scope === 'dm' ? activeThread.peer_login : activeThread.title) || `#${activeThread.id}`
     : '';
 
   const loadThreads = async () => {
@@ -198,7 +198,7 @@ export default function ChatPage() {
     const res = await apiFetch(`${API_URL}/chat/threads`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope: 'dm', email: dmEmail.trim() }),
+      body: JSON.stringify({ scope: 'dm', login: dmEmail.trim() }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) { alert(data?.error || 'Не удалось открыть чат'); return; }
@@ -274,7 +274,7 @@ export default function ChatPage() {
                 <input
                   value={dmEmail}
                   onChange={e => setDmEmail(e.target.value)}
-                  placeholder="email..."
+                  placeholder="логин..."
                   className="flex-1 text-xs px-2 py-1.5 border border-gray-200 rounded-lg outline-none"
                   onKeyDown={e => e.key === 'Enter' && createDM()}
                 />
@@ -291,7 +291,7 @@ export default function ChatPage() {
         <div className="flex-1 overflow-y-auto">
           {loading && <p className="text-xs text-gray-400 p-3">Загрузка...</p>}
           {threads.map(t => {
-            const label = t.scope === 'dm' ? (t.peer_email || `DM #${t.id}`) : (t.title || `#${t.id}`);
+            const label = t.scope === 'dm' ? (t.peer_login || `DM #${t.id}`) : (t.title || `#${t.id}`);
             const active = t.id === activeThreadId;
             return (
               <button
@@ -350,7 +350,7 @@ export default function ChatPage() {
             return (
               <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${mine ? 'text-white' : 'bg-white border border-gray-100 text-gray-800'}`} style={mine ? { background: P } : {}}>
-                  {!mine && <p className="text-[10px] font-medium mb-1 opacity-60">{m.user_email}</p>}
+                  {!mine && <p className="text-[10px] font-medium mb-1 opacity-60">{m.user_login}</p>}
                   {editingMessageId === m.id ? (
                     <div className="space-y-2">
                       <textarea value={editingBody} onChange={e => setEditingBody(e.target.value)} className="w-full text-sm rounded-lg border p-2 text-gray-900 outline-none" rows={2} />

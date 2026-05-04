@@ -38,15 +38,6 @@ function IconChart() {
   );
 }
 
-function IconGear() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-    </svg>
-  );
-}
-
 function IconUsers() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -54,6 +45,15 @@ function IconUsers() {
       <circle cx="9" cy="7" r="4"/>
       <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
       <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  );
+}
+
+function IconGear() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
     </svg>
   );
 }
@@ -68,10 +68,10 @@ const NAV = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const userEmail = localStorage.getItem('userEmail') || '';
-  const userRole = localStorage.getItem('userRole') || 'student';
-  const isTeacher = userRole === 'teacher';
-  const initial = userEmail.slice(0, 1).toUpperCase();
+  const userLogin = localStorage.getItem('userLogin') || '';
+  const userRole = localStorage.getItem('userRole') || '';
+  const initial = userLogin.slice(0, 1).toUpperCase();
+  const isAdmin = userRole === 'admin';
 
   const isActive = (path: string) =>
     path === '/' ? pathname === '/' : pathname.startsWith(path);
@@ -99,20 +99,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         })}
 
         <div className="mt-auto flex flex-col items-center gap-1">
-          {isTeacher && (
+          {isAdmin && (
             <button
-              onClick={() => navigate('/teacher')}
+              onClick={() => navigate('/users')}
               className="flex flex-col items-center gap-1 w-full px-1 py-3 transition-colors"
-              style={{ color: pathname === '/teacher' ? P : '#9CA3AF' }}
+              style={{ color: pathname === '/users' ? P : '#9CA3AF' }}
               title="Пользователи"
             >
-              <span style={pathname === '/teacher' ? { background: PL, borderRadius: 10, padding: 6 } : { padding: 6 }}>
+              <span style={pathname === '/users' ? { background: PL, borderRadius: 10, padding: 6 } : { padding: 6 }}>
                 <IconUsers />
               </span>
-              <span className="text-[9px] font-medium leading-tight text-center">Студенты</span>
             </button>
           )}
-
           <button
             onClick={() => navigate('/admin')}
             className="flex flex-col items-center gap-1 w-full px-1 py-3 transition-colors"
@@ -122,7 +120,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <span style={pathname === '/admin' ? { background: PL, borderRadius: 10, padding: 6 } : { padding: 6 }}>
               <IconGear />
             </span>
-            {isTeacher && <span className="text-[9px] font-medium leading-tight text-center">Группы</span>}
           </button>
         </div>
       </aside>
@@ -132,12 +129,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Header */}
         <header className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 shrink-0 h-14">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-gray-900 text-[15px]">BugTracker</span>
-            {isTeacher && (
-              <span className="text-[10px] font-semibold text-white px-2 py-0.5 rounded-full" style={{ background: P }}>
-                Преподаватель
-              </span>
-            )}
+            <span className="font-bold text-gray-900 text-[15px]">🐛 BugTracker</span>
           </div>
           <button onClick={() => navigate('/profile')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <div
@@ -146,7 +138,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             >
               {initial}
             </div>
-            <span className="text-sm text-gray-700 font-medium hidden sm:block max-w-[120px] truncate">{userEmail}</span>
+            <span className="text-sm text-gray-700 font-medium hidden sm:block max-w-[120px] truncate">{userLogin}</span>
           </button>
         </header>
 
@@ -175,16 +167,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </button>
           );
         })}
-        {isTeacher && (
+        {isAdmin && (
           <button
-            onClick={() => navigate('/teacher')}
+            onClick={() => navigate('/users')}
             className="flex flex-col items-center justify-center gap-0.5 flex-1 py-2 transition-colors"
-            style={{ color: pathname === '/teacher' ? P : '#9CA3AF' }}
+            style={{ color: pathname === '/users' ? P : '#9CA3AF' }}
           >
-            <span style={pathname === '/teacher' ? { background: PL, borderRadius: 8, padding: 4 } : { padding: 4 }}>
+            <span style={pathname === '/users' ? { background: PL, borderRadius: 8, padding: 4 } : { padding: 4 }}>
               <IconUsers />
             </span>
-            <span className="text-[9px] font-medium leading-tight">Студенты</span>
+            <span className="text-[9px] font-medium leading-tight">Юзеры</span>
           </button>
         )}
         <button
@@ -195,7 +187,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <span style={pathname === '/admin' ? { background: PL, borderRadius: 8, padding: 4 } : { padding: 4 }}>
             <IconGear />
           </span>
-          <span className="text-[9px] font-medium leading-tight">{isTeacher ? 'Группы' : 'Группы'}</span>
+          <span className="text-[9px] font-medium leading-tight">Управление</span>
         </button>
       </nav>
 

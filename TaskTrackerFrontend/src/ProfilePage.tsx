@@ -5,6 +5,13 @@ import { apiFetch } from './api';
 
 const P = '#7C5CBF';
 
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Владелец', admin: 'Администратор', member: 'Участник',
+  pm: 'Менеджер', dev: 'Разработчик', qa: 'Тестировщик', viewer: 'Наблюдатель',
+  developer: 'Разработчик',
+};
+const roleLabel = (r: string) => ROLE_LABELS[r] ?? r;
+
 function PencilIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -66,14 +73,14 @@ export default function ProfilePage() {
   const changeEmail = async () => {
     setLoading(true);
     try {
-      const res = await apiFetch(`${API_URL}/me/email`, {
+      const res = await apiFetch(`${API_URL}/me/login`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_email: newEmail.trim(), current_password: emailPass }),
+        body: JSON.stringify({ new_login: newEmail.trim(), current_password: emailPass }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Ошибка');
-      localStorage.setItem('userEmail', newEmail.trim());
+      localStorage.setItem('userLogin', newEmail.trim());
       setEmailPass('');
       setEditEmail(false);
       await fetchMe();
@@ -117,7 +124,7 @@ export default function ProfilePage() {
           {initial}
         </div>
         <p className="font-semibold text-gray-900">{email || '—'}</p>
-        <span className="text-xs text-gray-400 mt-0.5">{role}</span>
+        <span className="text-xs text-gray-400 mt-0.5">{roleLabel(role)}</span>
         <button
           onClick={() => setEditEmail(!editEmail)}
           className="mt-3 flex items-center gap-1.5 text-sm font-medium px-4 py-1.5 rounded-xl border border-gray-200 text-gray-600 hover:border-[#7C5CBF] hover:text-[#7C5CBF] transition-colors"
@@ -144,7 +151,7 @@ export default function ProfilePage() {
             {orgsOpen && (
               <div className="px-4 pb-3 space-y-1">
                 {orgs.length === 0 ? <p className="text-xs text-gray-400">Нет организаций</p> : orgs.map(o => (
-                  <div key={o.id} className="text-sm text-gray-600 py-1 border-t border-gray-50">{o.name} <span className="text-xs text-gray-400">({o.role})</span></div>
+                  <div key={o.id} className="text-sm text-gray-600 py-1 border-t border-gray-50">{o.name} <span className="text-xs text-gray-400">({roleLabel(o.role ?? '')})</span></div>
                 ))}
               </div>
             )}

@@ -1,6 +1,6 @@
 const http = require('http');
 
-const PORT = 3001;
+const PORT = 3002;
 
 // Fake data
 const users = [

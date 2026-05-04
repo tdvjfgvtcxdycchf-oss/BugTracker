@@ -38,8 +38,9 @@ export default function AnalyticsPage() {
   }, [selectedOrgId]);
 
   useEffect(() => {
+    if (!selectedProjectId) { setStats([]); return; }
     setLoading(true);
-    apiFetch(`${API_URL}/stats`)
+    apiFetch(`${API_URL}/stats?project_id=${selectedProjectId}`)
       .then(r => r.json())
       .then(d => setStats(Array.isArray(d) ? d : []))
       .catch(() => {})

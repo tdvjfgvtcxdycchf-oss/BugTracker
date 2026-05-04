@@ -4,7 +4,7 @@ import { API_URL } from './config';
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -12,7 +12,7 @@ export default function AuthPage() {
 
   const switchMode = () => {
     setIsLogin(prev => !prev);
-    setEmail(''); setPassword(''); setFormError(null); setPending(false);
+    setLogin(''); setPassword(''); setFormError(null); setPending(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,7 +26,7 @@ export default function AuthPage() {
       const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(isLogin ? { email, password } : { email, password, role: 'student' }),
+        body: JSON.stringify(isLogin ? { login, password } : { login, password, role: 'qa' }),
       });
 
       const data = await response.json();
@@ -44,9 +44,9 @@ export default function AuthPage() {
         }
         localStorage.setItem('isAuthenticated', 'true');
         localStorage.setItem('userId', userId.toString());
-        localStorage.setItem('userEmail', email);
+        localStorage.setItem('userLogin', login);
         localStorage.setItem('jwtToken', token);
-        localStorage.setItem('userRole', data.role || 'student');
+        localStorage.setItem('userRole', data.role || 'qa');
         navigate('/');
         window.location.reload();
       } else {
@@ -83,12 +83,12 @@ export default function AuthPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700">Логин</label>
               <input
-                type="email"
+                type="text"
                 required
                 className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
-                placeholder="email@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="username"
+                value={login}
+                onChange={(e) => setLogin(e.target.value)}
               />
             </div>
             <div>

@@ -6,10 +6,16 @@ const P = '#7C5CBF';
 
 type Group = { id: number; name: string; role?: string };
 type Project = { id: number; org_id: number; name: string; role?: string };
-type Member = { user_id: number; email: string; role: string };
+type Member = { user_id: number; login: string; role: string };
 
 const inputCls = 'flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#7C5CBF] bg-white';
-const selectCls = 'px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none bg-white';
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Владелец', admin: 'Администратор', member: 'Участник',
+  pm: 'Менеджер', dev: 'Разработчик', qa: 'Тестировщик', viewer: 'Наблюдатель',
+  developer: 'Разработчик',
+};
+const roleLabel = (r: string) => ROLE_LABELS[r] ?? r;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -21,9 +27,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function AdminPage() {
-  const role = localStorage.getItem('userRole') || 'student';
-  const isTeacher = role === 'teacher';
-
   const [groups, setGroups] = useState<Group[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -35,7 +38,7 @@ export default function AdminPage() {
 
   const [newGroupName, setNewGroupName] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
-  const [memberEmail, setMemberEmail] = useState('');
+  const [memberLogin, setMemberLogin] = useState('');
   const [memberHint, setMemberHint] = useState<string | null>(null);
 
   const fetchGroups = async () => {
@@ -113,18 +116,18 @@ export default function AdminPage() {
   };
 
   const addMember = async () => {
-    const email = memberEmail.trim();
-    if (!email || !selectedProjectId) return;
+    const login = memberLogin.trim();
+    if (!login || !selectedProjectId) return;
     setMemberHint(null);
     setLoading(true);
     try {
       const res = await apiFetch(`${API_URL}/projects/${selectedProjectId}/members`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role: 'qa' }),
+        body: JSON.stringify({ login, role: 'qa' }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Ошибка');
-      setMemberEmail('');
+      setMemberLogin('');
       await fetchMembers(selectedProjectId);
     } catch (e: any) {
       if (e.message === 'user_not_found') setMemberHint('Пользователь не зарегистрирован');
@@ -138,46 +141,6 @@ export default function AdminPage() {
     await fetchMembers(selectedProjectId);
   };
 
-  // Student view: read-only project info
-  if (!isTeacher) {
-    return (
-      <div className="p-6 max-w-2xl mx-auto">
-        <h1 className="text-xl font-bold text-gray-900 mb-6">Мои проекты</h1>
-        <Section title="Проект">
-          <div className="space-y-2">
-            <select
-              value={selectedProjectId || ''}
-              onChange={e => {
-                const v = Number(e.target.value);
-                setSelectedProjectId(v);
-                localStorage.setItem('selectedProjectId', String(v));
-              }}
-              className={selectCls + ' w-full'}
-            >
-              <option value="">Выберите проект</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </div>
-        </Section>
-        {members.length > 0 && (
-          <div className="mt-4">
-            <Section title="Участники проекта">
-              <div className="space-y-2">
-                {members.map(m => (
-                  <div key={m.user_id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0">
-                    <span className="text-sm text-gray-700 flex-1">{m.email}</span>
-                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{m.role}</span>
-                  </div>
-                ))}
-              </div>
-            </Section>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Teacher view
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -254,17 +217,17 @@ export default function AdminPage() {
         </Section>
 
         {/* Add member */}
-        <Section title="Добавить студента в проект">
+        <Section title="Добавить участника в проект">
           {!selectedProjectId ? (
             <p className="text-sm text-gray-400">Сначала выберите проект.</p>
           ) : (
             <div className="space-y-2">
               <div className="flex gap-2">
                 <input
-                  value={memberEmail}
-                  onChange={e => { setMemberEmail(e.target.value); setMemberHint(null); }}
+                  value={memberLogin}
+                  onChange={e => { setMemberLogin(e.target.value); setMemberHint(null); }}
                   onKeyDown={e => e.key === 'Enter' && addMember()}
-                  placeholder="Email студента"
+                  placeholder="Логин участника"
                   className={inputCls}
                 />
                 <button onClick={addMember} className="text-white px-4 py-2.5 rounded-xl font-semibold text-sm shrink-0" style={{ background: '#10B981' }}>
@@ -272,7 +235,7 @@ export default function AdminPage() {
                 </button>
               </div>
               <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-400">Студент должен быть зарегистрирован</p>
+                <p className="text-xs text-gray-400">Участник должен быть зарегистрирован</p>
                 <button
                   onClick={async () => { await navigator.clipboard.writeText(`${window.location.origin}/login`); alert('Ссылка скопирована'); }}
                   className="text-xs font-bold"
@@ -296,8 +259,8 @@ export default function AdminPage() {
             <div className="space-y-2">
               {members.map(m => (
                 <div key={m.user_id} className="flex items-center gap-2 p-2 rounded-xl border border-gray-100">
-                  <span className="text-sm text-gray-700 flex-1 truncate">{m.email}</span>
-                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{m.role}</span>
+                  <span className="text-sm text-gray-700 flex-1 truncate">{m.login}</span>
+                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{roleLabel(m.role)}</span>
                   <button onClick={() => removeMember(m.user_id)} className="text-xs font-bold text-red-400 hover:text-red-600 shrink-0">
                     Удалить
                   </button>

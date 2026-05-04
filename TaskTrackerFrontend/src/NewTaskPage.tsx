@@ -10,29 +10,28 @@ export default function NewTaskPage() {
   const [taskType, setTaskType] = useState('Задача');
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const selectedProjectId = Number(localStorage.getItem('selectedProjectId') || '0');
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    setPhoto(file);
-    if (file) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setPhotos(prev => [...prev, ...files]);
+    files.forEach(file => {
       const reader = new FileReader();
-      reader.onload = ev => setPhotoPreview(ev.target?.result as string);
+      reader.onload = ev => setPreviews(prev => [...prev, ev.target?.result as string]);
       reader.readAsDataURL(file);
-    } else {
-      setPhotoPreview(null);
-    }
+    });
+    if (fileRef.current) fileRef.current.value = '';
   };
 
-  const removePhoto = () => {
-    setPhoto(null);
-    setPhotoPreview(null);
-    if (fileRef.current) fileRef.current.value = '';
+  const removePhoto = (i: number) => {
+    setPhotos(prev => prev.filter((_, j) => j !== i));
+    setPreviews(prev => prev.filter((_, j) => j !== i));
   };
 
   const handleCreate = async () => {
@@ -52,10 +51,10 @@ export default function NewTaskPage() {
       const data = await res.json();
       const taskId = data.id;
 
-      if (photo && taskId) {
+      for (const photo of photos) {
         const form = new FormData();
         form.append('photo', photo);
-        await apiFetch(`${API_URL}/tasks/${taskId}/photo`, { method: 'POST', body: form });
+        await apiFetch(`${API_URL}/tasks/${taskId}/photos`, { method: 'POST', body: form });
       }
 
       navigate('/');
@@ -106,33 +105,36 @@ export default function NewTaskPage() {
           />
         </div>
 
-        {/* Photo */}
-        <div className="mb-6">
-          {photoPreview ? (
-            <div className="relative rounded-xl overflow-hidden border border-gray-200">
-              <img src={photoPreview} alt="preview" className="w-full max-h-48 object-cover" />
-              <button
-                onClick={removePhoto}
-                className="absolute top-2 right-2 bg-black/50 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-black/70 transition-colors"
-              >
-                ✕
-              </button>
+        {/* Photos */}
+        <div className="mb-6 space-y-2">
+          {previews.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {previews.map((src, i) => (
+                <div key={i} className="relative w-20 h-20 rounded-xl overflow-hidden border border-gray-200">
+                  <img src={src} className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => removePhoto(i)}
+                    className="absolute top-1 right-1 bg-black/50 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] hover:bg-black/70"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 flex flex-col items-center gap-1 text-gray-400 hover:border-[#7C5CBF] hover:text-[#7C5CBF] transition-colors"
-            >
-              <span className="text-2xl">📎</span>
-              <span className="text-xs font-medium">Прикрепить фото</span>
-              <span className="text-[10px]">до 15 МБ</span>
-            </button>
           )}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="w-full border-2 border-dashed border-gray-200 rounded-xl py-3 flex items-center justify-center gap-2 text-gray-400 hover:border-[#7C5CBF] hover:text-[#7C5CBF] transition-colors"
+          >
+            <span className="text-xl">📎</span>
+            <span className="text-xs font-medium">{previews.length > 0 ? 'Добавить ещё' : 'Прикрепить фото'}</span>
+          </button>
           <input
             ref={fileRef}
             type="file"
             accept="image/*"
+            multiple
             className="hidden"
             onChange={handlePhotoChange}
           />

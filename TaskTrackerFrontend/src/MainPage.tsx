@@ -127,7 +127,7 @@ export default function MainPage() {
       <div className="flex flex-col items-center justify-center h-full py-32 px-4 text-center">
         <div className="text-6xl mb-5">📚</div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Нет проектов</h2>
-        <p className="text-gray-400 max-w-xs text-sm">Преподаватель создаст группу, проект и добавит вас в него.</p>
+        <p className="text-gray-400 max-w-xs text-sm">Администратор создаст группу, проект и добавит вас в него.</p>
       </div>
     );
   }

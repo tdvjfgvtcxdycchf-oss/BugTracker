@@ -5,14 +5,20 @@ import { apiFetch } from './api';
 
 const P = '#7C5CBF';
 
-type User = { id: number; email: string; role: string; created_at?: string };
+type User = { id: number; login: string; role: string; created_at?: string };
 
-export default function TeacherPage() {
+const ROLE_LABELS: Record<string, string> = {
+  admin: 'Администратор', developer: 'Разработчик', qa: 'Тестировщик',
+};
+const SYSTEM_ROLES = ['admin', 'developer', 'qa'];
+const roleLabel = (r: string) => ROLE_LABELS[r] ?? r;
+
+export default function UsersPage() {
   const navigate = useNavigate();
-  const role = localStorage.getItem('userRole') || 'student';
+  const role = localStorage.getItem('userRole') || '';
 
   useEffect(() => {
-    if (role !== 'teacher') navigate('/', { replace: true });
+    if (role !== 'admin') navigate('/', { replace: true });
   }, []);
 
   const [users, setUsers] = useState<User[]>([]);
@@ -55,8 +61,8 @@ export default function TeacherPage() {
     } catch { alert('Не удалось изменить роль'); }
   };
 
-  const deleteUser = async (userId: number, email: string) => {
-    if (!confirm(`Удалить пользователя ${email}?`)) return;
+  const deleteUser = async (userId: number, login: string) => {
+    if (!confirm(`Удалить пользователя ${login}?`)) return;
     try {
       const res = await apiFetch(`${API_URL}/admin/users/${userId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error();
@@ -104,7 +110,7 @@ export default function TeacherPage() {
 
       {error && (
         <div className="bg-orange-50 border border-orange-100 rounded-2xl p-5 text-center">
-          <p className="text-orange-600 text-sm font-medium mb-1">{error}</p>
+          <p className="text-orange-600 text-sm font-medium">{error}</p>
         </div>
       )}
 
@@ -127,20 +133,19 @@ export default function TeacherPage() {
                   {users.map(u => (
                     <tr key={u.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-gray-800 font-medium">
-                        {u.email}
+                        {u.login}
                         {u.id === myId && <span className="ml-2 text-xs text-gray-400">(вы)</span>}
                       </td>
                       <td className="px-4 py-3">
                         {u.id === myId ? (
-                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-semibold">{u.role}</span>
+                          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-semibold">{roleLabel(u.role)}</span>
                         ) : (
                           <select
                             value={u.role}
                             onChange={e => changeRole(u.id, e.target.value)}
                             className="text-xs border border-gray-200 rounded-lg px-2 py-1 outline-none bg-white focus:border-[#7C5CBF]"
                           >
-                            <option value="student">student</option>
-                            <option value="teacher">teacher</option>
+                            {SYSTEM_ROLES.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                           </select>
                         )}
                       </td>
@@ -179,7 +184,7 @@ export default function TeacherPage() {
                               </button>
                             )}
                             <button
-                              onClick={() => deleteUser(u.id, u.email)}
+                              onClick={() => deleteUser(u.id, u.login)}
                               className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors"
                             >
                               Удалить
@@ -201,22 +206,19 @@ export default function TeacherPage() {
             ) : users.map(u => (
               <div key={u.id} className="bg-white rounded-2xl border border-gray-100 p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">
-                      {u.email}
-                      {u.id === myId && <span className="ml-2 text-xs text-gray-400">(вы)</span>}
-                    </p>
-                  </div>
+                  <p className="text-sm font-medium text-gray-800">
+                    {u.login}
+                    {u.id === myId && <span className="ml-2 text-xs text-gray-400">(вы)</span>}
+                  </p>
                   {u.id === myId ? (
-                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-semibold">{u.role}</span>
+                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-semibold">{roleLabel(u.role)}</span>
                   ) : (
                     <select
                       value={u.role}
                       onChange={e => changeRole(u.id, e.target.value)}
                       className="text-xs border border-gray-200 rounded-lg px-2 py-1 outline-none bg-white focus:border-[#7C5CBF]"
                     >
-                      <option value="student">student</option>
-                      <option value="teacher">teacher</option>
+                      {SYSTEM_ROLES.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                     </select>
                   )}
                 </div>
@@ -258,7 +260,7 @@ export default function TeacherPage() {
                           Сбросить пароль
                         </button>
                         <button
-                          onClick={() => deleteUser(u.id, u.email)}
+                          onClick={() => deleteUser(u.id, u.login)}
                           className="px-4 py-2 rounded-lg text-sm font-medium text-red-400 border border-red-200 hover:bg-red-50 transition-colors"
                         >
                           Удалить
