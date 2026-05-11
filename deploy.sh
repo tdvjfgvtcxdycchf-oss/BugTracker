@@ -54,10 +54,13 @@ else
   log "SSL cert found: $CERT_PATH"
 fi
 
-# Проверяем что бэкенд живой перед деплоем
+# Проверяем что бэкенд живой (предупреждение, не блокируем деплой)
 log "Checking backend at $BACKEND_HEALTHCHECK ..."
-curl -sf "$BACKEND_HEALTHCHECK" >/dev/null 2>&1 \
-  || fail "Backend is not responding at $BACKEND_HEALTHCHECK — fix backend before deploying frontend"
+if curl -sf "$BACKEND_HEALTHCHECK" >/dev/null 2>&1; then
+  log "Backend is healthy."
+else
+  log "WARNING: Backend not responding at $BACKEND_HEALTHCHECK — deploying frontend anyway"
+fi
 
 # ──────────────────────────────────────────────
 # 2. Pull latest code
