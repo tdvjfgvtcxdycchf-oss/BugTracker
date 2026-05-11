@@ -26,13 +26,13 @@ Deploy (server, `BugTracker/`): `bash deploy.sh`
 
 **Backend layers:** `sql/postgres.go` (pgx) → `service/taskTracker.go` (business logic) → `server/handlers.go` (JSON API) → `server/server.go` (routes)
 
-**Frontend:** SPA, no state lib. `localStorage`: `userId`, `userEmail`, `jwtToken`, `selectedOrgId`, `selectedProjectId`.
+**Frontend:** SPA, no state lib. `localStorage`: `userId`, `userLogin`, `jwtToken`, `selectedOrgId`, `selectedProjectId`.
 
 **Auth:** JWT with `ver` claim (version-revokable). bcrypt passwords. Rate limit: 15 req/min/IP on `/login`, `POST /users`.
 
 **Access model:** orgs → org_member (owner|admin|member) → projects → project_member (pm|dev|qa|viewer)
 
-**Bug photos:** `multipart/form-data` → stored as BYTEA. `GET /bugs/{id}/photo` is JWT-protected (fetch as blob).
+**Bug photos:** `multipart/form-data` → stored in MinIO (S3). Multiple photos per bug/task via `/photos` endpoints (plural). URL returned as presigned or public link.
 
 ## Key API
 - `GET /tasks?project_id=` · `POST /tasks` (requires `project_id`)
@@ -40,7 +40,7 @@ Deploy (server, `BugTracker/`): `bash deploy.sh`
 - `GET/PATCH /orgs/{id}/members/{userId}` · `DELETE` (owner/admin only)
 - `GET/PATCH /projects/{id}/members/{userId}` · `DELETE`
 - `POST /orgs/{id}/members` / `POST /projects/{id}/members` by email; 404 if user absent
-- `GET /me` · `PATCH /me/email` · `PATCH /me/password` · `POST /me/logout-all`
+- `GET /me` · `PATCH /me/login` · `PATCH /me/password` · `POST /me/logout-all`
 - Auth error JSON includes optional `code` field
 
 ## Chat

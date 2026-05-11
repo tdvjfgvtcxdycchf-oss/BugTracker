@@ -9,6 +9,7 @@ type Project = { id: number; org_id: number; name: string; role?: string };
 type Member = { user_id: number; login: string; role: string };
 
 const inputCls = 'flex-1 px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#7C5CBF] bg-white';
+const selectCls = 'px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-[#7C5CBF] bg-white';
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Владелец', admin: 'Администратор', member: 'Участник',
@@ -30,6 +31,7 @@ export default function AdminPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [orgMembers, setOrgMembers] = useState<Member[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<number>(0);
   const [selectedProjectId, setSelectedProjectId] = useState<number>(
     () => Number(localStorage.getItem('selectedProjectId') || '0')
@@ -38,8 +40,16 @@ export default function AdminPage() {
 
   const [newGroupName, setNewGroupName] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
+
+  // Project member form
   const [memberLogin, setMemberLogin] = useState('');
+  const [memberRole, setMemberRole] = useState<string>('qa');
   const [memberHint, setMemberHint] = useState<string | null>(null);
+
+  // Org member form
+  const [orgMemberLogin, setOrgMemberLogin] = useState('');
+  const [orgMemberRole, setOrgMemberRole] = useState<string>('member');
+  const [orgMemberHint, setOrgMemberHint] = useState<string | null>(null);
 
   const fetchGroups = async () => {
     setLoading(true);
@@ -78,8 +88,20 @@ export default function AdminPage() {
     setMembers(Array.isArray(data) ? data : []);
   };
 
+  const fetchOrgMembers = async (orgId: number) => {
+    if (!orgId) { setOrgMembers([]); return; }
+    const res = await apiFetch(`${API_URL}/orgs/${orgId}/members`);
+    const data = await res.json().catch(() => []);
+    setOrgMembers(Array.isArray(data) ? data : []);
+  };
+
   useEffect(() => { fetchGroups(); }, []);
-  useEffect(() => { if (selectedGroupId) fetchProjects(selectedGroupId); }, [selectedGroupId]);
+  useEffect(() => {
+    if (selectedGroupId) {
+      fetchProjects(selectedGroupId);
+      fetchOrgMembers(selectedGroupId);
+    }
+  }, [selectedGroupId]);
   useEffect(() => { fetchMembers(selectedProjectId); }, [selectedProjectId]);
 
   const createGroup = async () => {
@@ -123,7 +145,7 @@ export default function AdminPage() {
     try {
       const res = await apiFetch(`${API_URL}/projects/${selectedProjectId}/members`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login, role: 'qa' }),
+        body: JSON.stringify({ login, role: memberRole }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Ошибка');
@@ -139,6 +161,32 @@ export default function AdminPage() {
     if (!selectedProjectId || !confirm('Удалить участника?')) return;
     await apiFetch(`${API_URL}/projects/${selectedProjectId}/members/${userId}`, { method: 'DELETE' });
     await fetchMembers(selectedProjectId);
+  };
+
+  const addOrgMember = async () => {
+    const login = orgMemberLogin.trim();
+    if (!login || !selectedGroupId) return;
+    setOrgMemberHint(null);
+    setLoading(true);
+    try {
+      const res = await apiFetch(`${API_URL}/orgs/${selectedGroupId}/members`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login, role: orgMemberRole }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Ошибка');
+      setOrgMemberLogin('');
+      await fetchOrgMembers(selectedGroupId);
+    } catch (e: any) {
+      if (e.message === 'user_not_found') setOrgMemberHint('Пользователь не зарегистрирован');
+      else setOrgMemberHint(e.message);
+    } finally { setLoading(false); }
+  };
+
+  const removeOrgMember = async (userId: number) => {
+    if (!selectedGroupId || !confirm('Удалить участника из организации?')) return;
+    await apiFetch(`${API_URL}/orgs/${selectedGroupId}/members/${userId}`, { method: 'DELETE' });
+    await fetchOrgMembers(selectedGroupId);
   };
 
   return (
@@ -216,7 +264,7 @@ export default function AdminPage() {
           )}
         </Section>
 
-        {/* Add member */}
+        {/* Add project member */}
         <Section title="Добавить участника в проект">
           {!selectedProjectId ? (
             <p className="text-sm text-gray-400">Сначала выберите проект.</p>
@@ -230,6 +278,16 @@ export default function AdminPage() {
                   placeholder="Логин участника"
                   className={inputCls}
                 />
+                <select
+                  value={memberRole}
+                  onChange={e => setMemberRole(e.target.value)}
+                  className={selectCls}
+                >
+                  <option value="qa">QA</option>
+                  <option value="dev">Dev</option>
+                  <option value="pm">PM</option>
+                  <option value="viewer">Viewer</option>
+                </select>
                 <button onClick={addMember} className="text-white px-4 py-2.5 rounded-xl font-semibold text-sm shrink-0" style={{ background: '#10B981' }}>
                   Добавить
                 </button>
@@ -249,7 +307,7 @@ export default function AdminPage() {
           )}
         </Section>
 
-        {/* Members list */}
+        {/* Project members list */}
         <Section title="Участники проекта">
           {!selectedProjectId ? (
             <p className="text-sm text-gray-400">Выберите проект.</p>
@@ -269,6 +327,61 @@ export default function AdminPage() {
             </div>
           )}
         </Section>
+
+        {/* Add org member */}
+        <Section title="Добавить участника в организацию">
+          {!selectedGroupId ? (
+            <p className="text-sm text-gray-400">Сначала выберите группу.</p>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <input
+                  value={orgMemberLogin}
+                  onChange={e => { setOrgMemberLogin(e.target.value); setOrgMemberHint(null); }}
+                  onKeyDown={e => e.key === 'Enter' && addOrgMember()}
+                  placeholder="Логин участника"
+                  className={inputCls}
+                />
+                <select
+                  value={orgMemberRole}
+                  onChange={e => setOrgMemberRole(e.target.value)}
+                  className={selectCls}
+                >
+                  <option value="member">Участник</option>
+                  <option value="admin">Администратор</option>
+                </select>
+                <button onClick={addOrgMember} className="text-white px-4 py-2.5 rounded-xl font-semibold text-sm shrink-0" style={{ background: '#10B981' }}>
+                  Добавить
+                </button>
+              </div>
+              {orgMemberHint && <p className="text-xs text-orange-600 bg-orange-50 border border-orange-100 rounded-xl p-2">{orgMemberHint}</p>}
+            </div>
+          )}
+        </Section>
+
+        {/* Org members list */}
+        <Section title="Участники организации">
+          {!selectedGroupId ? (
+            <p className="text-sm text-gray-400">Выберите группу.</p>
+          ) : orgMembers.length === 0 ? (
+            <p className="text-sm text-gray-400">Нет участников</p>
+          ) : (
+            <div className="space-y-2">
+              {orgMembers.map(m => (
+                <div key={m.user_id} className="flex items-center gap-2 p-2 rounded-xl border border-gray-100">
+                  <span className="text-sm text-gray-700 flex-1 truncate">{m.login}</span>
+                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">{roleLabel(m.role)}</span>
+                  {m.role !== 'owner' && (
+                    <button onClick={() => removeOrgMember(m.user_id)} className="text-xs font-bold text-red-400 hover:text-red-600 shrink-0">
+                      Удалить
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
       </div>
     </div>
   );

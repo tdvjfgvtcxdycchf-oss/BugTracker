@@ -65,7 +65,7 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
   const [lifecyclePending, setLifecyclePending] = useState(false);
 
   // Comments
-  const [comments, setComments] = useState<{ id_pk: number; user_id_fk: number; body: string; created_at: string }[]>([]);
+  const [comments, setComments] = useState<{ id_pk?: number; id?: number; user_id_fk?: number; user_id?: number; body: string; created_at: string }[]>([]);
   const [commentBody, setCommentBody] = useState('');
   const [commentPending, setCommentPending] = useState(false);
 
@@ -609,9 +609,9 @@ const BugDetailEditor: React.FC<Props> = ({ isOpen, onClose, task, currentBug, o
                   <p className="text-sm text-slate-400">Нет комментариев</p>
                 )}
                 {comments.map(c => (
-                  <div key={c.id_pk} className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                  <div key={c.id_pk ?? c.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold text-slate-500">{getUserLogin(c.user_id_fk)}</span>
+                      <span className="text-xs font-bold text-slate-500">{getUserLogin(c.user_id_fk ?? c.user_id)}</span>
                       <span className="ml-auto text-[10px] text-slate-400">{new Date(c.created_at).toLocaleString()}</span>
                     </div>
                     <p className="text-sm text-slate-800 whitespace-pre-wrap">{c.body}</p>

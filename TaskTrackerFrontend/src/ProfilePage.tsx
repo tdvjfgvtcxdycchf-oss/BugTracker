@@ -45,9 +45,9 @@ export default function ProfilePage() {
     const res = await apiFetch(`${API_URL}/me`);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return;
-    setEmail(data.email || '');
+    setEmail(data.login || '');
     setRole(data.role || '');
-    setNewEmail(data.email || '');
+    setNewEmail(data.login || '');
   };
 
   const fetchOrgs = async () => {
@@ -105,7 +105,8 @@ export default function ProfilePage() {
     finally { setLoading(false); }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try { await apiFetch(`${API_URL}/me/logout-all`, { method: 'POST' }); } catch {}
     localStorage.clear();
     navigate('/login');
     window.location.reload();
@@ -194,7 +195,7 @@ export default function ProfilePage() {
             </div>
             {editEmail && (
               <div className="mt-3 space-y-2 pt-3 border-t border-gray-50">
-                <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Новый email" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none" />
+                <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Новый логин" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none" />
                 <input type="password" value={emailPass} onChange={e => setEmailPass(e.target.value)} placeholder="Текущий пароль" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none" />
                 <button disabled={loading} onClick={changeEmail} className="w-full py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60" style={{ background: P }}>Сохранить</button>
               </div>
