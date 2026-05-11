@@ -91,11 +91,11 @@ log "Static files deployed to $WWW_DIR"
 # 5. Nginx
 # ──────────────────────────────────────────────
 log "=== [5/5] Updating nginx config ==="
-cp "$APP_DIR/nginx/bugtracker.conf" /etc/nginx/sites-available/bugtracker.conf
+cp "$APP_DIR/nginx/bugtracker.conf" /etc/nginx/sites-available/bugtracker
 
-if [ ! -e /etc/nginx/sites-enabled/bugtracker.conf ]; then
-  ln -s /etc/nginx/sites-available/bugtracker.conf \
-        /etc/nginx/sites-enabled/bugtracker.conf
+if [ ! -e /etc/nginx/sites-enabled/bugtracker ]; then
+  ln -s /etc/nginx/sites-available/bugtracker \
+        /etc/nginx/sites-enabled/bugtracker
   log "Created symlink in sites-enabled (first deploy)"
 fi
 
