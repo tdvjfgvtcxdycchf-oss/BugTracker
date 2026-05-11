@@ -86,6 +86,8 @@ VITE_API_URL="$FRONTEND_URL/api" npm run build
 log "=== [4/5] Deploying static files ==="
 TEMP_DIR="$(mktemp -d)"
 cp -r "$APP_DIR/TaskTrackerFrontend/dist/." "$TEMP_DIR/"
+chmod -R 755 "$TEMP_DIR"
+find "$TEMP_DIR" -type f -exec chmod 644 {} \;
 rm -rf "$WWW_DIR"
 mv "$TEMP_DIR" "$WWW_DIR"
 log "Static files deployed to $WWW_DIR"
